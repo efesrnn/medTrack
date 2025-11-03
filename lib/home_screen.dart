@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _saveSections();
   }
-  
+
   void _deleteSection(int index) {
     setState(() {
       _sections[index] = {
@@ -112,16 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          '💊 İlaç Takip',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
-        ),
+        title: const Text('💊 İlaç Takip'),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -130,17 +127,17 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Card(
-                color: Colors.teal.shade50,
-                child: const Padding(
-                  padding: EdgeInsets.all(20.0),
+                color: colorScheme.primaryContainer.withOpacity(0.6),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
                   child: Row(
                     children: [
-                      Icon(Icons.schedule, color: Colors.teal),
-                      SizedBox(width: 15),
+                      Icon(Icons.tips_and_updates_outlined, color: colorScheme.onPrimaryContainer, size: 28),
+                      const SizedBox(width: 15),
                       Expanded(
                         child: Text(
-                          'İlaç hatırlatmalarınızı ayarlayın. Saatleri daireden veya listeden düzenleyebilirsiniz.',
-                          style: TextStyle(color: Colors.teal, fontWeight: FontWeight.w500),
+                          'İlaç saatlerinizi dairesel seçiciden veya listeden kolayca ayarlayın.',
+                          style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onPrimaryContainer, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
@@ -151,21 +148,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
               Center(
                 child: Container(
-                  height: MediaQuery.of(context).size.width * 0.8,
-                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: MediaQuery.of(context).size.width * 0.85,
+                  width: MediaQuery.of(context).size.width * 0.85,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    color: colorScheme.surface,
+                    shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        spreadRadius: 3,
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+                        color: colorScheme.primary.withOpacity(0.15),
+                        spreadRadius: 5,
+                        blurRadius: 20,
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(10),
                   child: CircularSelector(
                     key: _circularSelectorKey,
                     sections: _sections,
@@ -175,11 +170,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 30),
 
-              const Text(
-                'Planlanmış İlaçlar',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  'Planlanmış İlaçlar',
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
 
               ..._sections.asMap().entries.map((entry) {
                 int index = entry.key;
@@ -187,19 +185,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 TimeOfDay time = section['time'] as TimeOfDay;
 
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.symmetric(vertical: 7),
                   child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                      child: Icon(Icons.medication, color: Theme.of(context).primaryColor),
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: Icon(Icons.medication_liquid_rounded, color: colorScheme.primary, size: 28),
                     ),
                     title: Text(
                       section['name'],
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, fontSize: 19),
                     ),
                     subtitle: Text(
                       'Saat: ${time.format(context)}',
-                      style: const TextStyle(color: Colors.grey),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
                     ),
                     trailing: PopupMenuButton<String>(
                       onSelected: (value) {
@@ -219,10 +218,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Bölmeyi Boşalt')),
                         ),
                       ],
-                      icon: const Icon(Icons.more_vert),
+                      icon: const Icon(Icons.more_vert_rounded),
                     ),
                     onTap: () {
-                       _circularSelectorKey.currentState?.showEditDialog(index);
+                      _circularSelectorKey.currentState?.showEditDialog(index);
                     },
                   ),
                 );

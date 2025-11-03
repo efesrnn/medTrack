@@ -13,15 +13,13 @@ class CircularSelector extends StatefulWidget {
   });
 
   @override
-  // State sınıfı adını CircularSelectorState olarak değiştirdik (public erişim için)
   State<CircularSelector> createState() => CircularSelectorState();
 }
 
-// State sınıfı adını CircularSelectorState olarak değiştirdik
 class CircularSelectorState extends State<CircularSelector> {
-
-  // Metot adını public erişim için showEditDialog olarak değiştirdik
   Future<void> showEditDialog(int sectionIndex) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final section = widget.sections[sectionIndex];
     final nameController = TextEditingController(text: section['name']);
     TimeOfDay? pickedTime = section['time'];
@@ -32,12 +30,12 @@ class CircularSelectorState extends State<CircularSelector> {
         return StatefulBuilder(
           builder: (context, setStateInDialog) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: Row(
                 children: [
-                  Icon(Icons.edit_note, color: Colors.teal),
-                  SizedBox(width: 10),
-                  Text('İlaç Bilgilerini Düzenle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  Icon(Icons.edit_note_rounded, color: colorScheme.primary, size: 28),
+                  const SizedBox(width: 10),
+                  Text('İlaç Bilgilerini Düzenle', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 ],
               ),
               content: Column(
@@ -48,54 +46,43 @@ class CircularSelectorState extends State<CircularSelector> {
                     decoration: InputDecoration(
                       labelText: 'İlaç Adı',
                       hintText: 'Örn: Sabah Tableti',
-                      prefixIcon: const Icon(Icons.medication_outlined, color: Colors.teal),
+                      prefixIcon: Icon(Icons.medication_outlined, color: colorScheme.primary),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.teal),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.5)),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.teal, width: 2),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: colorScheme.primary, width: 2),
                       ),
                     ),
+                    style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 20),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.teal.shade200),
+                      color: colorScheme.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.primary.withOpacity(0.2)),
                     ),
                     child: ListTile(
-                      leading: const Icon(Icons.access_time_filled, color: Colors.teal),
-                      title: const Text(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      leading: Icon(Icons.access_time_filled_rounded, color: colorScheme.primary, size: 28),
+                      title: Text(
                         'Hatırlatma Saati',
-                        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.teal),
+                        style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurface, fontWeight: FontWeight.w600),
                       ),
                       trailing: Text(
                         pickedTime?.format(context) ?? 'Saat Seç',
-                        style: const TextStyle(
+                        style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: Colors.teal,
+                          color: colorScheme.primary,
                         ),
                       ),
                       onTap: () async {
                         final time = await showTimePicker(
                           context: context,
                           initialTime: pickedTime ?? TimeOfDay.now(),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: ColorScheme.light(
-                                  primary: Colors.teal,
-                                  onPrimary: Colors.white,
-                                  onSurface: Colors.black,
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
                         );
                         if (time != null) {
                           setStateInDialog(() {
@@ -107,14 +94,16 @@ class CircularSelectorState extends State<CircularSelector> {
                   ),
                 ],
               ),
-              actionsAlignment: MainAxisAlignment.spaceAround,
+              actionsAlignment: MainAxisAlignment.end,
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('İptal', style: TextStyle(color: Colors.grey)),
+                  child: Text('İptal', style: TextStyle(color: colorScheme.onSurfaceVariant)),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.save),
+                  icon: const Icon(Icons.save_alt_rounded, size: 20),
                   onPressed: () {
                     if (pickedTime != null) {
                       Navigator.of(context).pop({
@@ -125,11 +114,12 @@ class CircularSelectorState extends State<CircularSelector> {
                   },
                   label: const Text('Kaydet'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   ),
                 ),
               ],
@@ -181,72 +171,45 @@ class CircularSelectorState extends State<CircularSelector> {
       final tappedSectionIndex = (normalizedAngle / sectionAngle).floor();
 
       if (tappedSectionIndex >= 0 && tappedSectionIndex < widget.sections.length) {
-        showEditDialog(tappedSectionIndex); // Public metodu kullandık
+        showEditDialog(tappedSectionIndex);
       }
     }
   }
 }
 
-// --- Dairesel Çizim (Painter) ---
 class _CircularSelectorPainter extends CustomPainter {
   final List<Map<String, dynamic>> sections;
   final BuildContext context;
 
   final List<Color> _colors = [
-    Colors.teal.shade400,
-    Colors.deepOrange.shade400,
-    Colors.lightBlue.shade400,
-    Colors.purple.shade400,
-    Colors.green.shade400,
-    Colors.pink.shade400,
+    Colors.deepPurple.shade300,
+    Colors.pink.shade300,
+    Colors.orange.shade300,
+    Colors.cyan.shade300,
+    Colors.green.shade300,
     Colors.amber.shade400,
-    Colors.indigo.shade400,
   ];
 
   _CircularSelectorPainter(this.sections, this.context);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width / 2, size.height / 2) * 0.75;
-    final strokeWidth = 50.0;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    // Temel halka (Arka plan)
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = min(size.width / 2, size.height / 2) * 0.8;
+    const strokeWidth = 65.0;
+
+    // Arka plan halkası
     final basePaint = Paint()
       ..color = Colors.grey.shade200
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt; // DÜZ UÇLAR
+      ..strokeWidth = strokeWidth;
 
     canvas.drawCircle(center, radius, basePaint);
 
-    if (sections.isEmpty) {
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: 'İlaç Ekle',
-          style: TextStyle(color: Colors.teal.shade400, fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        textAlign: TextAlign.center,
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: size.width * 0.5);
-
-      final icon = Icons.add_circle_outline;
-      final iconPainter = TextPainter(
-        text: TextSpan(
-          text: String.fromCharCode(icon.codePoint),
-          style: TextStyle(
-            fontSize: 40,
-            fontFamily: icon.fontFamily,
-            color: Colors.grey.shade400,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      iconPainter.paint(canvas, Offset(center.dx - iconPainter.width / 2, center.dy - iconPainter.height - 5));
-      textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy + 5));
-      return;
-    }
+    if (sections.isEmpty) return;
 
     final sectionAngle = 2 * pi / sections.length;
 
@@ -254,64 +217,46 @@ class _CircularSelectorPainter extends CustomPainter {
       final startAngle = i * sectionAngle - (pi / 2) - (sectionAngle / 2);
       final sweepAngle = sectionAngle;
 
-      // Gölge efekti
-      final shadowPaint = Paint()
-        ..color = Colors.black.withOpacity(0.2)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.0)
-        ..strokeCap = StrokeCap.butt;
-
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle - 0.05,
-        false,
-        shadowPaint,
-      );
-
-      // Ana Çizgi
+      // Renkli bölümler
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.butt // DÜZ UÇLAR
-        ..color = (_colors[i % _colors.length]);
+        ..strokeCap = StrokeCap.butt
+        ..color = _colors[i % _colors.length];
 
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        startAngle,
+        startAngle + 0.025,
         sweepAngle - 0.05,
         false,
         paint,
       );
 
-      // --- İlaç İsimleri Okunabilirlik İyileştirmesi (SİYAH METİN) ---
+      // Yazılar
       final textAngle = startAngle + sweepAngle / 2;
       final timeOfDay = sections[i]['time'] as TimeOfDay?;
       final name = sections[i]['name'] as String;
       final timeText = timeOfDay?.format(context) ?? '';
 
-      final textRadius = radius - strokeWidth / 2 - 15;
+      final textRadius = radius;
 
       final textSpan = TextSpan(
         children: [
           TextSpan(
-              text: '$timeText\n',
-              style: TextStyle(
-                color: Colors.black, // Saat: Siyah
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                shadows: [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 2)],
-              )
+            text: '$timeText\n',
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              shadows: [Shadow(color: Colors.black.withOpacity(0.6), blurRadius: 3, offset: const Offset(1, 1))],
+            ),
           ),
           TextSpan(
-              text: name,
-              style: TextStyle(
-                color: Colors.grey.shade800, // İsim: Koyu Gri
-                fontSize: 10,
-                fontWeight: FontWeight.normal,
-                shadows: [Shadow(color: Colors.white.withOpacity(0.5), blurRadius: 2)],
-              )
+            text: name,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: Colors.white.withOpacity(0.9),
+              fontWeight: FontWeight.w600,
+              shadows: [Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 2, offset: const Offset(1, 1))],
+            ),
           ),
         ],
       );
@@ -320,7 +265,7 @@ class _CircularSelectorPainter extends CustomPainter {
         text: textSpan,
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
-      )..layout(minWidth: 0, maxWidth: 60);
+      )..layout(minWidth: 0, maxWidth: 90);
 
       final textX = center.dx + textRadius * cos(textAngle) - textPainter.width / 2;
       final textY = center.dy + textRadius * sin(textAngle) - textPainter.height / 2;
@@ -328,15 +273,15 @@ class _CircularSelectorPainter extends CustomPainter {
       textPainter.paint(canvas, Offset(textX, textY));
     }
 
-    // Merkez İkonu
-    final centerIcon = Icons.access_time_filled;
+    // Merkez ikon
+    final centerIcon = Icons.medication_liquid_rounded;
     final iconPainter = TextPainter(
       text: TextSpan(
         text: String.fromCharCode(centerIcon.codePoint),
         style: TextStyle(
-          fontSize: 60,
+          fontSize: 64,
           fontFamily: centerIcon.fontFamily,
-          color: Colors.teal.shade300,
+          color: colorScheme.primary,
         ),
       ),
       textDirection: TextDirection.ltr,
