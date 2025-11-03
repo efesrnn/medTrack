@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'circular_selector.dart';
+import 'auth_service.dart';
 import 'database_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,18 +14,43 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<CircularSelectorState> _circularSelectorKey = GlobalKey<CircularSelectorState>();
+  final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
+  
+  String? _userUid;
   List<Map<String, dynamic>> _sections = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadSections();
+    _initializeUserAndLoadData();
+  }
+
+  Future<void> _initializeUserAndLoadData() async {
+    final uid = await _authService.getOrCreateUser();
+    print("uid alındı ${uid}");
+    if (uid != null) {
+      setState(() {
+        _userUid = uid;
+        _isLoading = false;
+      });
+      _loadSections();
+    } else {
+      // Handle the case where user initialization fails
+      setState(() {
+        _isLoading = false;
+      });
+      // Optionally, show an error message to the user
+    }
   }
 
   Future<void> _loadSections() async {
+    if (_userUid == null) return;
+
     final prefs = await SharedPreferences.getInstance();
-    final String? sectionsString = prefs.getString('sections');
+    final String? sectionsString = prefs.getString('sections_$_userUid'); // User-specific key
+
     if (sectionsString != null) {
       final List<dynamic> decoded = json.decode(sectionsString);
       if (decoded.isNotEmpty && decoded.length == 6) {
@@ -40,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
+    // If no local data, generate default and save
     setState(() {
       _sections = List.generate(6, (index) {
         return {
@@ -52,6 +79,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _saveSections() async {
+    if (_userUid == null) return;
+
     final prefs = await SharedPreferences.getInstance();
     final List<Map<String, dynamic>> serializableList = _sections.map((section) {
       final time = section['time'] as TimeOfDay;
@@ -61,8 +90,12 @@ class _HomeScreenState extends State<HomeScreen> {
         'minute': time.minute,
       };
     }).toList();
-    await prefs.setString('sections', json.encode(serializableList));
-    await _databaseService.saveSections(serializableList);
+    
+    // Save to local storage with user-specific key
+    await prefs.setString('sections_$_userUid', json.encode(serializableList));
+    
+    // Save to Firestore under the user's UID
+    await _databaseService.saveSections(_userUid!, serializableList);
   }
 
   void _updateSection(int index, Map<String, dynamic> data) {
@@ -117,6 +150,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
