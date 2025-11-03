@@ -5,7 +5,7 @@ import 'home_screen.dart';
 // Tema tanımı
 ThemeData get appTheme {
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: Colors.deepPurple,
+    seedColor: Color(0xFF6DBAF3),
     brightness: Brightness.light,
   );
 
