@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'circular_selector.dart'; // circular_selector.dart dosyasını çağır
+import 'circular_selector.dart';
+import 'database_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,6 +13,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<CircularSelectorState> _circularSelectorKey = GlobalKey<CircularSelectorState>();
+  final DatabaseService _databaseService = DatabaseService();
   List<Map<String, dynamic>> _sections = [];
 
   @override
@@ -25,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final String? sectionsString = prefs.getString('sections');
     if (sectionsString != null) {
       final List<dynamic> decoded = json.decode(sectionsString);
-      if (decoded.isNotEmpty && decoded.length == 6) { // Make sure we have 6 sections
+      if (decoded.isNotEmpty && decoded.length == 6) {
         setState(() {
           _sections = decoded.map((item) {
             return {
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       };
     }).toList();
     await prefs.setString('sections', json.encode(serializableList));
+    await _databaseService.saveSections(serializableList);
   }
 
   void _updateSection(int index, Map<String, dynamic> data) {
