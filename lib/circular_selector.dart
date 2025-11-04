@@ -187,7 +187,7 @@ class _CircularSelectorPainter extends CustomPainter {
     Colors.green.shade600,
     const Color(0xFFC55CCD),
     const Color(0xFFFFCC00),
-    const Color(0xFFFF6B6B),    
+    const Color(0xFFFF6B6B),
   ];
 
   _CircularSelectorPainter(this.sections, this.context);
