@@ -32,7 +32,7 @@ class _MainHubState extends State<MainHub> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('💊 İlaç Takip'),
+        title: const Text('İlaç Takip'),
       ),
       body: Center(
         child: _widgetOptions.elementAt(_selectedIndex),

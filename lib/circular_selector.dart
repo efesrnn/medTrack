@@ -182,12 +182,12 @@ class _CircularSelectorPainter extends CustomPainter {
   final BuildContext context;
 
   final List<Color> _colors = [
-    const Color(0xFF56ABE8), // Türk Mavisi (Derin, Canlı Mavi)
-    const Color(0xFFE60000),     // Koyu Kırmızı (Vişne Kırmızısı)
-    const Color(0xFFFFCC00), // Fenerbahçe Sarısı (Parlak Sarı)
-    Colors.green.shade600,   // Yeşil (Standart, Canlı)
-    const Color(0xFFC55CCD),  // Mor (Canlı Orta Ton)
-    const Color(0xFFFF6B6B),    // Pembe (Orta Canlı Pembe)
+    const Color(0xFF56ABE8),
+    const Color(0xFFE60000),
+    Colors.green.shade600,
+    const Color(0xFFC55CCD),
+    const Color(0xFFFFCC00),
+    const Color(0xFFFF6B6B),    
   ];
 
   _CircularSelectorPainter(this.sections, this.context);
@@ -243,7 +243,7 @@ class _CircularSelectorPainter extends CustomPainter {
       final textSpan = TextSpan(
         children: [
           TextSpan(
-            text: '$timeText\n',
+            text: '$name\n',
             style: theme.textTheme.titleLarge?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -251,7 +251,7 @@ class _CircularSelectorPainter extends CustomPainter {
             ),
           ),
           TextSpan(
-            text: name,
+            text: timeText,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: Colors.white.withOpacity(0.9),
               fontWeight: FontWeight.w600,

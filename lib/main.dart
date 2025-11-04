@@ -17,13 +17,13 @@ ThemeData get appTheme {
   );
 
   return baseTheme.copyWith(
-    textTheme: GoogleFonts.montserratTextTheme(baseTheme.textTheme),
+    textTheme: GoogleFonts.ptSerifTextTheme(baseTheme.textTheme),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       foregroundColor: colorScheme.onSurface,
       elevation: 0,
       centerTitle: true,
-      titleTextStyle: GoogleFonts.montserrat(
+      titleTextStyle: GoogleFonts.ptSerif(
         fontSize: 22,
         fontWeight: FontWeight.bold,
         color: colorScheme.onSurface,
