@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'package:dispenserapp/sync_screen.dart';
+import 'package:dispenserapp/features/ble_provisioning/sync_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'circular_selector.dart';
-import 'auth_service.dart';
-import 'database_service.dart';
+import 'package:dispenserapp/widgets/circular_selector.dart';
+import 'package:dispenserapp/services/auth_service.dart';
+import 'package:dispenserapp/services/database_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return {
               'name': item['name'],
               'time': TimeOfDay(hour: item['hour'], minute: item['minute']),
+              'isActive': item['isActive'] ?? false,
             };
           }).toList();
         });
@@ -69,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return {
           'name': 'Bölme ${index + 1}',
           'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),
+          'isActive': false,
         };
       });
     });
@@ -85,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
         'name': section['name'],
         'hour': time.hour,
         'minute': time.minute,
+        'isActive': section['isActive'] ?? false,
       };
     }).toList();
     
@@ -94,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _updateSection(int index, Map<String, dynamic> data) {
     setState(() {
-      _sections[index] = data;
+      _sections[index].addAll(data);
     });
     _saveSections();
   }
@@ -104,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _sections[index] = {
         'name': 'Bölme ${index + 1}',
         'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),
+        'isActive': false,
       };
     });
     _saveSections();
@@ -146,20 +150,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('İlaç Hatırlatıcı'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_box_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SyncScreen()),
-              );
-            },
-          ),
-        ],
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -238,25 +228,40 @@ class _HomeScreenState extends State<HomeScreen> {
                             'Saat: ${time.format(context)}',
                             style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
                           ),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) {
-                              if (value == 'edit') {
-                                _circularSelectorKey.currentState?.showEditDialog(index);
-                              } else if (value == 'delete') {
-                                _showDeleteConfirmationDialog(index);
-                              }
-                            },
-                            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                              const PopupMenuItem<String>(
-                                value: 'edit',
-                                child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Düzenle')),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: section['isActive'] ?? false,
+                                onChanged: (bool value) {
+                                  setState(() {
+                                    _sections[index]['isActive'] = value;
+                                  });
+                                  _saveSections();
+                                },
+                                activeColor: colorScheme.primary,
                               ),
-                              const PopupMenuItem<String>(
-                                value: 'delete',
-                                child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Bölmeyi Boşalt')),
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _circularSelectorKey.currentState?.showEditDialog(index);
+                                  } else if (value == 'delete') {
+                                    _showDeleteConfirmationDialog(index);
+                                  }
+                                },
+                                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                                  const PopupMenuItem<String>(
+                                    value: 'edit',
+                                    child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Düzenle')),
+                                  ),
+                                  const PopupMenuItem<String>(
+                                    value: 'delete',
+                                    child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Bölmeyi Boşalt')),
+                                  ),
+                                ],
+                                icon: const Icon(Icons.more_vert_rounded),
                               ),
                             ],
-                            icon: const Icon(Icons.more_vert_rounded),
                           ),
                           onTap: () {
                             _circularSelectorKey.currentState?.showEditDialog(index);

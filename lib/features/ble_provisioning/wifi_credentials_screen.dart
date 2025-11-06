@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:dispenserapp/auth_service.dart';
-import 'package:dispenserapp/ble_constants.dart';
+import 'package:dispenserapp/services/auth_service.dart';
+import 'package:dispenserapp/features/ble_provisioning/ble_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -19,6 +19,7 @@ class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
   final _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isSending = false;
+  String _status = '';
 
   @override
   void dispose() {
@@ -37,6 +38,7 @@ class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
 
     setState(() {
       _isSending = true;
+      _status = 'Veriler gönderiliyor...';
     });
 
     try {
@@ -64,28 +66,44 @@ class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
       await statusCharacteristic.setNotifyValue(true);
       statusCharacteristic.value.listen((value) {
         final status = utf8.decode(value);
-        // TODO: Handle status updates (WIFI_OK, WIFI_FAIL, etc.)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Durum: $status')),
-        );
+        if(mounted) {
+          setState(() {
+            _status = 'Cihaz durumu: $status';
+          });
+        }
+        
         if (status == 'FIREBASE_OK') {
-          Navigator.pop(context); // Go back to the previous screen
-          Navigator.pop(context); // Go back to the home screen
+           if(mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kurulum başarıyla tamamlandı!')),
+            );
+            Navigator.pop(context); // Go back to the sync screen
+           }
         }
       });
 
       // Send the 'SAVE' command
       await statusCharacteristic.write(utf8.encode('SAVE'));
+      setState(() {
+        _status = 'Veriler gönderildi, cihazdan onay bekleniyor...';
+      });
 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Veri gönderme hatası: $e')),
-      );
+      if(mounted) {
+        setState(() {
+          _status = 'Hata: $e';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Veri gönderme hatası: $e')),
+        );
+      }
+    } finally {
+       if(mounted) {
+        setState(() {
+          _isSending = false;
+        });
+       }
     }
-
-    setState(() {
-      _isSending = false;
-    });
   }
 
   @override
@@ -115,6 +133,9 @@ class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
                   ? const CircularProgressIndicator(color: Colors.white)
                   : const Text('Cihaza Gönder'),
             ),
+            const SizedBox(height: 20),
+            if(_status.isNotEmpty)
+              Text(_status, style: Theme.of(context).textTheme.bodyMedium,),
           ],
         ),
       ),

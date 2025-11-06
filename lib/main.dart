@@ -2,7 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
-import 'main_hub.dart'; // Import the new main hub
+import 'app/main_hub.dart'; // Import the new main hub
 
 // Tema tanımı
 ThemeData get appTheme {
@@ -63,7 +63,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'İlaç Hatırlatıcı',
+      title: 'DispenserApp',
       theme: appTheme, // Tanımlanan temayı kullan
       home: const MainHub(), // Start with MainHub instead of HomeScreen
       debugShowCheckedModeBanner: false,

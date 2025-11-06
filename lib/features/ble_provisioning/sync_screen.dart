@@ -1,7 +1,10 @@
-import 'package:dispenserapp/ble_constants.dart';
-import 'package:dispenserapp/wifi_credentials_screen.dart';
+import 'dart:io';
+
+import 'package:dispenserapp/features/ble_provisioning/ble_constants.dart';
+import 'package:dispenserapp/features/ble_provisioning/wifi_credentials_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SyncScreen extends StatefulWidget {
   const SyncScreen({super.key});
@@ -18,7 +21,7 @@ class _SyncScreenState extends State<SyncScreen> {
   @override
   void initState() {
     super.initState();
-    _startScan();
+    _requestPermissionsAndScan();
   }
 
   @override
@@ -26,6 +29,30 @@ class _SyncScreenState extends State<SyncScreen> {
     _stopScan();
     _connectedDevice?.disconnect();
     super.dispose();
+  }
+
+  Future<void> _requestPermissionsAndScan() async {
+    // Request Bluetooth permissions
+    if (Platform.isAndroid) {
+      var bluetoothScanStatus = await Permission.bluetoothScan.request();
+      var bluetoothConnectStatus = await Permission.bluetoothConnect.request();
+      var locationStatus = await Permission.location.request();
+
+      if (bluetoothScanStatus.isGranted &&
+          bluetoothConnectStatus.isGranted &&
+          locationStatus.isGranted) {
+        _startScan();
+      } else {
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Bluetooth ve konum izinleri cihaz taraması için gereklidir.')),
+          );
+        }
+      }
+    } else {
+       // On iOS, permissions are handled by the system dialog when you start scanning.
+      _startScan();
+    }
   }
 
   Future<void> _startScan() async {
@@ -39,19 +66,22 @@ class _SyncScreenState extends State<SyncScreen> {
         timeout: const Duration(seconds: 15),
       );
     } catch (e) {
-      // Handle scan error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bluetooth taraması başlatılamadı: $e')),
-      );
+       if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bluetooth taraması başlatılamadı: $e')),
+        );
+       }
     }
 
     FlutterBluePlus.scanResults.listen((results) {
       final filteredResults = results
           .where((r) => r.device.platformName.isNotEmpty)
           .toList();
-      setState(() {
-        _scanResults = filteredResults;
-      });
+      if (mounted) {
+        setState(() {
+          _scanResults = filteredResults;
+        });
+      }
     });
 
     await Future.delayed(const Duration(seconds: 15));
@@ -68,25 +98,37 @@ class _SyncScreenState extends State<SyncScreen> {
 
   Future<void> _connectToDevice(BluetoothDevice device) async {
     _stopScan();
-    await device.connect();
-    setState(() {
-      _connectedDevice = device;
-    });
+    try {
+      await device.connect();
+      if (!mounted) return;
+      setState(() {
+        _connectedDevice = device;
+      });
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => WifiCredentialsScreen(device: device),
-      ),
-    );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WifiCredentialsScreen(device: device),
+        ),
+      ).then((_) {
+         // After returning from the credentials screen, disconnect
+        device.disconnect();
+        setState(() {
+          _connectedDevice = null;
+        });
+      });
+    } catch (e) {
+       if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cihaza bağlanılamadı: $e')),
+        );
+       }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cihaz Kurulumu'),
-      ),
       body: Column(
         children: [
           if (_isScanning)
@@ -94,7 +136,7 @@ class _SyncScreenState extends State<SyncScreen> {
           Expanded(
             child: _scanResults.isEmpty && !_isScanning
                 ? const Center(
-                    child: Text('Yakında cihaz bulunamadı.'),
+                    child: Text('Yakında cihaz bulunamadı.\nİzinleri kontrol edin veya taramayı yeniden başlatın.', textAlign: TextAlign.center,),
                   )
                 : ListView.builder(
                     itemCount: _scanResults.length,
@@ -111,7 +153,7 @@ class _SyncScreenState extends State<SyncScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _isScanning ? _stopScan : _startScan,
+        onPressed: _isScanning ? _stopScan : _requestPermissionsAndScan,
         child: Icon(_isScanning ? Icons.stop : Icons.search),
       ),
     );

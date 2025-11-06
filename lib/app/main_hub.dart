@@ -1,7 +1,7 @@
+import 'package:dispenserapp/app/home_screen.dart';
+import 'package:dispenserapp/features/ble_provisioning/sync_screen.dart';
+import 'package:dispenserapp/app/relatives_screen.dart';
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
-import 'sync_screen.dart';
-import 'relatives_screen.dart';
 
 class MainHub extends StatefulWidget {
   const MainHub({super.key});
