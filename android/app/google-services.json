@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "698816170759",
+    "firebase_url": "https://smartmedicinedispenser-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "smartmedicinedispenser",
     "storage_bucket": "smartmedicinedispenser.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.example.dispenserapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "698816170759-536peqm3rfjp71h7q3kf9pgtb4ufbanj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.dispenserapp",
+            "certificate_hash": "f68fb05a7917bb3f3fa47dc00254e362ec6093c4"
+          }
+        },
+        {
+          "client_id": "698816170759-q8pmf3ife68263p17oenq9gjb8ak3399.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMAN4gGScHl6lEbIPC0VzFxA_uszTkm1Y"
@@ -20,7 +34,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "698816170759-q8pmf3ife68263p17oenq9gjb8ak3399.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "698816170759-o0hq5n49o5e1qj0nhqlg1gm4kqki0gmr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.dispenserapp"
+              }
+            }
+          ]
         }
       }
     }

@@ -1,13 +1,14 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dispenserapp/features/ble_provisioning/sync_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dispenserapp/widgets/circular_selector.dart';
-import 'package:dispenserapp/services/auth_service.dart';
 import 'package:dispenserapp/services/database_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String macAddress;
+
+  const HomeScreen({super.key, required this.macAddress});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -15,88 +16,77 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<CircularSelectorState> _circularSelectorKey = GlobalKey<CircularSelectorState>();
-  final AuthService _authService = AuthService();
   final DatabaseService _databaseService = DatabaseService();
   
-  String? _userUid;
   List<Map<String, dynamic>> _sections = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _initializeUserAndLoadData();
+    _loadSections();
   }
 
-  Future<void> _initializeUserAndLoadData() async {
-    final uid = await _authService.getOrCreateUser();
-    if (uid != null) {
-      setState(() {
-        _userUid = uid;
-      });
-      await _loadSections();
-    } 
+  Future<void> _loadSections() async {
+    // Start loading
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('dispenser').doc(widget.macAddress).get();
+
+      // After await, check if the widget is still in the tree.
+      if (!mounted) return;
+
+      if (doc.exists && doc.data()!.containsKey('section_config')) {
+        final List<dynamic> configData = doc.data()!['section_config'];
+        _sections = configData.map((item) {
+          final Map<String, dynamic> section = item as Map<String, dynamic>;
+          final bool isActive = section['isActive'] ?? false;
+          final TimeOfDay time = isActive
+              ? TimeOfDay(hour: section['hour'], minute: section['minute'])
+              : const TimeOfDay(hour: 8, minute: 0);
+
+          return {
+            'name': section['name'],
+            'time': time,
+            'isActive': isActive,
+          };
+        }).toList();
+      } else {
+        _sections = List.generate(6, (index) {
+          return {
+            'name': 'Bölme ${index + 1}',
+            'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),
+            'isActive': true,
+          };
+        });
+        await _saveSectionConfig();
+      }
+    } catch (e) {
+      print("Error loading sections: $e");
+    }
+
+    // Check if mounted again before the final setState.
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
   }
 
-  Future<void> _loadSections() async {
-    if (_userUid == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final String? sectionsString = prefs.getString('sections_$_userUid');
-
-    if (sectionsString != null) {
-      final List<dynamic> decoded = json.decode(sectionsString);
-      if (decoded.isNotEmpty && decoded.length == 6) {
-        _sections = decoded.asMap().entries.map((entry) {
-            final int index = entry.key;
-            final Map<String, dynamic> item = entry.value;
-            final bool isActive = item['isActive'];
-            
-            final TimeOfDay time = isActive
-                ? TimeOfDay(hour: item['hour'], minute: item['minute'])
-                : TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0); // Default time for inactive
-
-            return {
-              'name': item['name'],
-              'time': time,
-              'isActive': isActive,
-            };
-        }).toList();
-        return;
-      }
-    }
-
-    _sections = List.generate(6, (index) {
-      return {
-        'name': 'Bölme ${index + 1}',
-        'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),
-        'isActive': true,
-      };
-    });
-    await _saveSections();
-  }
-
-  Future<void> _saveSections() async {
-    if (_userUid == null) return;
-
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _saveSectionConfig() async {
     final List<Map<String, dynamic>> serializableList = _sections.map((section) {
       final time = section['time'] as TimeOfDay;
-      final bool isActive = section['isActive'] ?? false;
-      
       return {
         'name': section['name'],
-        'hour':  time.hour,
+        'hour': time.hour,
         'minute': time.minute,
-        'isActive': isActive,
+        'isActive': section['isActive'] ?? false,
       };
     }).toList();
 
-    await prefs.setString('sections_$_userUid', json.encode(serializableList));
-    await _databaseService.saveSections(_userUid!, serializableList);
+    await _databaseService.saveSectionConfig(widget.macAddress, serializableList);
   }
 
   void _updateSection(int index, Map<String, dynamic> data) {
@@ -104,11 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _sections[index].addAll(data);
       _sections[index]['isActive'] = true;
     });
-    _saveSections();
+    _saveSectionConfig();
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +103,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cihaz Ayarları'),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -203,10 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 value: isActive,
                                 onChanged: (bool value) {
                                   setState(() {
-                                    print("tercih değiştirildi $value");
                                     _sections[index]['isActive'] = value;
                                   });
-                                  _saveSections();
+                                  _saveSectionConfig();
                                 },
                                 activeColor: colorScheme.primary,
                               ),
