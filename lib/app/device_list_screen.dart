@@ -18,15 +18,47 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   final AuthService _authService = AuthService();
   final DatabaseService _dbService = DatabaseService();
 
+  // 1. Durum değişkeni eklendi: Görselin yüklenip yüklenmediğini tutar
+  bool _isImagePrecached = false;
+
   @override
   void initState() {
     super.initState();
     _initFuture = _authService.getOrCreateUser();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Yalnızca bir kere görsel önbelleğe alma işlemi yapılmasını sağlıyoruz
+    if (!_isImagePrecached) {
+      // 2. precacheImage'ın Future sonucunu bekliyoruz
+      final image = const AssetImage('assets/dispenser_icon.png');
+      precacheImage(image, context).then((_) {
+        // Görsel başarılı bir şekilde önbelleğe alındığında durumu güncelliyoruz
+        if (mounted) {
+          setState(() {
+            _isImagePrecached = true;
+          });
+        }
+      }).catchError((error) {
+        // Hata durumunda da devam etme kararı alabiliriz, burada sadece logladık
+        debugPrint("Görsel yükleme hatası: $error");
+        if (mounted) {
+          setState(() {
+            _isImagePrecached = true; // Hata olsa bile ilerlemek isteyebiliriz
+          });
+        }
+      });
+    }
+  }
+
   void _retryLogin() {
     setState(() {
       _initFuture = _authService.getOrCreateUser();
+      // Tekrar denemede görseli de tekrar yüklemeyi tetikleyebiliriz
+      _isImagePrecached = false;
     });
   }
 
@@ -65,6 +97,19 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 3. Görsel yüklenmediyse önce CircularProgressIndicator gösteriyoruz
+    if (!_isImagePrecached) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            // Estetik bir renk ekleyebilirsiniz
+            color: Colors.deepPurple,
+          ),
+        ),
+      );
+    }
+
+    // Görsel yüklendikten sonra mevcut FutureBuilder mantığı devam ediyor
     return FutureBuilder<String?>(
       future: _initFuture,
       builder: (context, snapshot) {
@@ -96,7 +141,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, userSnapshot) {
         if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-          return const Center(child: Text("Kullanıcı profili yüklenemedi."));
+          return CircularProgressIndicator(
+            color: Colors.deepPurple,
+          );
         }
 
         final userData = userSnapshot.data!.data() as Map<String, dynamic>;
@@ -110,7 +157,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.only(top: 20.0), // Üst boşluğu biraz artırdık
+          padding: const EdgeInsets.only(top: 20.0),
           itemCount: ownedDispensers.length,
           itemBuilder: (context, index) {
             final macAddress = ownedDispensers[index] as String;
@@ -125,10 +172,10 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                 final deviceName = deviceData['device_name'] as String? ?? "Akıllı İlaç Kutusu";
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16), // Dikey boşluğu artırdık
-                  elevation: 9, // Gölgeyi belirginleştirdik
+                  margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  elevation: 9,
                   shadowColor: Colors.black38,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(36)), // Daha yuvarlak köşeler
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(36)),
                   child: InkWell(
                     onTap: () {
                       Navigator.push(
@@ -146,7 +193,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                               'assets/dispenser_icon.png',
                               width: 110,
                               height: 120,
-                              fit: BoxFit.fitWidth,
+                              fit: BoxFit.cover,
                             ),
                           ),
                           const SizedBox(width: 16),
