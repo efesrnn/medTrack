@@ -16,6 +16,18 @@ class DatabaseService {
     }
   }
 
+  Future<void> updateDeviceName(String macAddress, String newName) async {
+    if (macAddress.isEmpty || newName.isEmpty) return;
+
+    try {
+      await _firestore.collection('dispenser').doc(macAddress).update({
+        'device_name': newName,
+      });
+    } catch (e) {
+      print('Error updating device name: $e');
+    }
+  }
+
   Future<void> updateUserDeviceList(String uid, String email) async {
     if (uid.isEmpty || email.isEmpty) return;
 
