@@ -69,4 +69,11 @@ class AuthService {
 
     return uid;
   }
+
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_uid');
+  }
 }

@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
@@ -35,23 +34,11 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   }
 
   Future<String?> _initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? uid = prefs.getString('uid');
-
-    if (uid == null) {
-      final results = await Future.wait([
-        _authService.getOrCreateUser(),
-        precacheImage(const AssetImage('assets/dispenser_icon.png'), context),
-      ]);
-      uid = results[0] as String?;
-      if (uid != null) {
-        await prefs.setString('uid', uid);
-      }
-    } else {
-      await precacheImage(const AssetImage('assets/dispenser_icon.png'), context);
-    }
-
-    return uid;
+    final results = await Future.wait([
+      _authService.getOrCreateUser(),
+      precacheImage(const AssetImage('assets/dispenser_icon.png'), context),
+    ]);
+    return results[0] as String?;
   }
 
   void _retryLogin() {
@@ -126,12 +113,11 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, userSnapshot) {
         if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-          return CircularProgressIndicator();
+          return const CircularProgressIndicator();
         }
 
         final userData = userSnapshot.data!.data() as Map<String, dynamic>;
         final List<dynamic> ownedDispensers = userData['owned_dispensers'] ?? [];
-
         if (ownedDispensers.isEmpty) {
           return const Center(
               child: Padding(
