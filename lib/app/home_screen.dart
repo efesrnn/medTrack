@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
           };
         }).toList();
       } else {
-        _sections = List.generate(6, (index) {
+        _sections = List.generate(4, (index) {
           return {
             'name': 'Bölme ${index + 1}',
             'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),

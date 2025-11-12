@@ -183,11 +183,9 @@ class _CircularSelectorPainter extends CustomPainter {
 
   final List<Color> _colors = [
     const Color(0xFF56ABE8),
-    const Color(0xFFE60000),
-    Colors.green.shade600,
-    const Color(0xFFC55CCD),
-    const Color(0xFFFFCC00),
-    const Color(0xFFFF6B6B),
+    const Color(0xFFFF5A6D),
+    const Color(0xFFFFC245),
+    const Color(0xFFEF86FF),
   ];
 
   _CircularSelectorPainter(this.sections, this.context);
