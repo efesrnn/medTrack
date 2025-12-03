@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Roller için enum tanımı
 enum DeviceRole { owner, secondary, readOnly, none }
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Yardımcı Fonksiyon: Email'i standartlaştırır
+  // --- YARDIMCI METOTLAR ---
   String _sanitize(String email) => email.trim().toLowerCase();
+
+  // --- TEMEL CİHAZ FONKSİYONLARI ---
 
   // 1. İlaç saatlerini kaydetme
   Future<void> saveSectionConfig(String macAddress, List<Map<String, dynamic>> sections) async {
@@ -32,7 +35,131 @@ class DatabaseService {
     }
   }
 
-  // 3. Manuel Cihaz Ekleme (Sağlamlaştırılmış Mantık)
+  // --- KULLANICI YÖNETİMİ (HOME SCREEN İÇİN) ---
+
+  // 3. Rol Kontrolü
+  Future<DeviceRole> getUserRole(String macAddress, String? rawEmail) async {
+    if (rawEmail == null || macAddress.isEmpty) return DeviceRole.none;
+    final String email = _sanitize(rawEmail);
+
+    try {
+      final doc = await _firestore.collection('dispenser').doc(macAddress).get();
+      if (!doc.exists) return DeviceRole.none;
+
+      final data = doc.data()!;
+
+      if ((data['owner_mail'] as String?)?.toLowerCase() == email) return DeviceRole.owner;
+
+      final secondary = List<String>.from(data['secondary_mails'] ?? []).map((e) => _sanitize(e)).toList();
+      if (secondary.contains(email)) return DeviceRole.secondary;
+
+      final readOnly = List<String>.from(data['read_only_mails'] ?? []).map((e) => _sanitize(e)).toList();
+      if (readOnly.contains(email)) return DeviceRole.readOnly;
+
+      return DeviceRole.none;
+    } catch (e) {
+      print('Rol alma hatası: $e');
+      return DeviceRole.none;
+    }
+  }
+
+  // 4. Yeni bir izleyici (read-only) ekler
+  Future<void> addReadOnlyUser(String macAddress, String rawEmail) async {
+    final String email = _sanitize(rawEmail);
+    if (macAddress.isEmpty || email.isEmpty) return;
+
+    try {
+      await _firestore.collection('dispenser').doc(macAddress).update({
+        'read_only_mails': FieldValue.arrayUnion([email]),
+      });
+    } catch (e) {
+      print('Error adding read-only user: $e');
+    }
+  }
+
+  // 5. İzleyiciyi yöneticiye terfi ettirir (İzleyici -> Yönetici)
+  Future<void> promoteToSecondary(String macAddress, String targetRawEmail) async {
+    final String targetEmail = _sanitize(targetRawEmail);
+    if (macAddress.isEmpty || targetEmail.isEmpty) return;
+
+    try {
+      final deviceRef = _firestore.collection('dispenser').doc(macAddress);
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(deviceRef);
+        if (!snapshot.exists) return;
+        final data = snapshot.data() as Map<String, dynamic>;
+
+        List<String> readOnly = List<String>.from(data['read_only_mails'] ?? []);
+        List<String> secondary = List<String>.from(data['secondary_mails'] ?? []);
+
+        readOnly.removeWhere((e) => _sanitize(e) == targetEmail);
+        if (!secondary.any((e) => _sanitize(e) == targetEmail)) {
+          secondary.add(targetEmail);
+        }
+
+        transaction.update(deviceRef, {
+          'read_only_mails': readOnly,
+          'secondary_mails': secondary
+        });
+      });
+    } catch (e) {
+      print('Terfi hatası: $e');
+    }
+  }
+
+  // 6. Yöneticiyi izleyiciye düşürür (Yönetici -> İzleyici) [YENİ EKLENEN]
+  Future<void> demoteToReadOnly(String macAddress, String targetRawEmail) async {
+    final String targetEmail = _sanitize(targetRawEmail);
+    if (macAddress.isEmpty || targetEmail.isEmpty) return;
+
+    try {
+      final deviceRef = _firestore.collection('dispenser').doc(macAddress);
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(deviceRef);
+        if (!snapshot.exists) return;
+        final data = snapshot.data() as Map<String, dynamic>;
+
+        List<String> readOnly = List<String>.from(data['read_only_mails'] ?? []);
+        List<String> secondary = List<String>.from(data['secondary_mails'] ?? []);
+
+        // Yöneticiden sil
+        secondary.removeWhere((e) => _sanitize(e) == targetEmail);
+
+        // İzleyiciye ekle (eğer yoksa)
+        if (!readOnly.any((e) => _sanitize(e) == targetEmail)) {
+          readOnly.add(targetEmail);
+        }
+
+        transaction.update(deviceRef, {
+          'read_only_mails': readOnly,
+          'secondary_mails': secondary
+        });
+      });
+    } catch (e) {
+      print('Rütbe düşürme hatası: $e');
+    }
+  }
+
+  // 7. Kullanıcıyı tamamen siler
+  Future<void> removeUser(String macAddress, String rawEmail) async {
+    final String email = _sanitize(rawEmail);
+    if (macAddress.isEmpty || email.isEmpty) return;
+
+    try {
+      await _firestore.collection('dispenser').doc(macAddress).update({
+        'read_only_mails': FieldValue.arrayRemove([email]),
+        'secondary_mails': FieldValue.arrayRemove([email]),
+      });
+    } catch (e) {
+      print('Error removing user: $e');
+    }
+  }
+
+  // --- CİHAZ EKLEME VE SENKRONİZASYON ---
+
+  // 8. Manuel Cihaz Ekleme
   Future<String> addDeviceManually(String uid, String rawEmail, String macAddress) async {
     if (uid.isEmpty || macAddress.isEmpty || rawEmail.isEmpty) return 'Geçersiz bilgi.';
 
@@ -52,120 +179,49 @@ class DatabaseService {
         final deviceData = deviceDoc.data() as Map<String, dynamic>;
         final currentOwner = (deviceData['owner_mail'] as String?)?.toLowerCase();
 
-        // Mevcut listeleri al ve temizle (Büyük/Küçük harf farketmeksizin siler)
         List<String> secondaryMails = List<String>.from(deviceData['secondary_mails'] ?? []);
         List<String> readOnlyMails = List<String>.from(deviceData['read_only_mails'] ?? []);
 
-        // Listeden bu kullanıcıyı tamamen çıkar (Temizlik)
         secondaryMails.removeWhere((e) => _sanitize(e) == userEmail);
         readOnlyMails.removeWhere((e) => _sanitize(e) == userEmail);
 
         if (currentOwner == null || currentOwner.isEmpty) {
-          // DURUM A: Sahipsiz -> Owner Ol
           transaction.update(deviceRef, {
             'owner_mail': userEmail,
-            'secondary_mails': secondaryMails, // Temizlenmiş liste
-            'read_only_mails': readOnlyMails, // Temizlenmiş liste
+            'secondary_mails': secondaryMails,
+            'read_only_mails': readOnlyMails,
           });
-
           transaction.update(userRef, {
             'owned_dispensers': FieldValue.arrayUnion([macAddress]),
             'secondary_dispensers': FieldValue.arrayRemove([macAddress]),
             'read_only_dispensers': FieldValue.arrayRemove([macAddress]),
           });
-
         } else if (currentOwner != userEmail) {
-          // DURUM B: Sahipli -> İzleyici Ol (Varsayılan)
-          readOnlyMails.add(userEmail); // Listeye ekle
-
+          readOnlyMails.add(userEmail);
           transaction.update(deviceRef, {
             'read_only_mails': readOnlyMails,
-            'secondary_mails': secondaryMails, // Temizlenmiş halini yaz (varsa silinmiş olur)
+            'secondary_mails': secondaryMails,
           });
-
           transaction.update(userRef, {
             'read_only_dispensers': FieldValue.arrayUnion([macAddress]),
             'owned_dispensers': FieldValue.arrayRemove([macAddress]),
             'secondary_dispensers': FieldValue.arrayRemove([macAddress]),
           });
         }
-
         return 'success';
       });
-
     } catch (e) {
       print('Manuel ekleme hatası: $e');
       return 'Bir hata oluştu: $e';
     }
   }
 
-  // 4. Kullanıcıyı Terfi Ettirme (Read-Only -> Secondary)
-  Future<void> promoteToSecondary(String macAddress, String targetRawEmail) async {
-    final String targetEmail = _sanitize(targetRawEmail);
-    try {
-      final deviceRef = _firestore.collection('dispenser').doc(macAddress);
-
-      await _firestore.runTransaction((transaction) async {
-        final snapshot = await transaction.get(deviceRef);
-        if (!snapshot.exists) return;
-
-        final data = snapshot.data() as Map<String, dynamic>;
-
-        // Listeleri al ve manuel düzenle (Case-safe)
-        List<String> readOnly = List<String>.from(data['read_only_mails'] ?? []);
-        List<String> secondary = List<String>.from(data['secondary_mails'] ?? []);
-
-        // Read-only'den sil
-        readOnly.removeWhere((e) => _sanitize(e) == targetEmail);
-
-        // Secondary'e ekle (eğer yoksa)
-        if (!secondary.any((e) => _sanitize(e) == targetEmail)) {
-          secondary.add(targetEmail);
-        }
-
-        transaction.update(deviceRef, {
-          'read_only_mails': readOnly,
-          'secondary_mails': secondary
-        });
-      });
-    } catch (e) {
-      print('Terfi hatası: $e');
-    }
-  }
-
-  // 5. Rol Kontrolü
-  Future<DeviceRole> getUserRole(String macAddress, String rawEmail) async {
-    final String email = _sanitize(rawEmail);
-    try {
-      final doc = await _firestore.collection('dispenser').doc(macAddress).get();
-      if (!doc.exists) return DeviceRole.none;
-
-      final data = doc.data()!;
-
-      if ((data['owner_mail'] as String?)?.toLowerCase() == email) return DeviceRole.owner;
-
-      final secondary = List<String>.from(data['secondary_mails'] ?? []).map((e) => _sanitize(e)).toList();
-      if (secondary.contains(email)) return DeviceRole.secondary;
-
-      final readOnly = List<String>.from(data['read_only_mails'] ?? []).map((e) => _sanitize(e)).toList();
-      if (readOnly.contains(email)) return DeviceRole.readOnly;
-
-      return DeviceRole.none;
-    } catch (e) {
-      return DeviceRole.none;
-    }
-  }
-
-  // 6. Senkronizasyon (Hiyerarşik ve Case-Insensitive)
+  // 9. Liste Senkronizasyonu
   Future<void> updateUserDeviceList(String uid, String rawEmail) async {
     if (uid.isEmpty || rawEmail.isEmpty) return;
     final String email = _sanitize(rawEmail);
 
     try {
-      // Veritabanındaki tüm cihazları çekip manuel filtreleyeceğiz
-      // (Firestore'da 'where arrayContains' case-sensitive olduğu için %100 güvenli değil)
-      // Ancak performans için şimdilik 'where' kullanıyoruz, AuthService'de email'i düzelttik.
-
       final ownerQuery = await _firestore.collection('dispenser').where('owner_mail', isEqualTo: email).get();
       final secondaryQuery = await _firestore.collection('dispenser').where('secondary_mails', arrayContains: email).get();
       final readOnlyQuery = await _firestore.collection('dispenser').where('read_only_mails', arrayContains: email).get();
@@ -174,7 +230,6 @@ class DatabaseService {
       final Set<String> secondaryIds = secondaryQuery.docs.map((d) => d.id).toSet();
       final Set<String> readOnlyIds = readOnlyQuery.docs.map((d) => d.id).toSet();
 
-      // HİYERARŞİ TEMİZLİĞİ
       secondaryIds.removeAll(ownedIds);
       readOnlyIds.removeAll(ownedIds);
       readOnlyIds.removeAll(secondaryIds);
@@ -184,7 +239,6 @@ class DatabaseService {
         'secondary_dispensers': secondaryIds.toList(),
         'read_only_dispensers': readOnlyIds.toList(),
       });
-
     } catch (e) {
       print('Update list error: $e');
     }

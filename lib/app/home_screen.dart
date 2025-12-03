@@ -3,7 +3,8 @@ import 'package:dispenserapp/services/auth_service.dart';
 import 'package:dispenserapp/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:dispenserapp/widgets/circular_selector.dart';
-import 'package:dispenserapp/services/database_service.dart';
+import 'package:dispenserapp/services/database_service.dart'; // DeviceRole buradan geliyor
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   final String macAddress;
@@ -23,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _sections = [];
   bool _isLoading = true;
 
-  // Varsayılan olarak en kısıtlı rolü veriyoruz
+  // Varsayılan rol
   DeviceRole _currentRole = DeviceRole.readOnly;
   String? _currentUserEmail;
 
@@ -38,27 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final user = await _authService.getOrCreateUser();
     if (user != null) {
-      _currentUserEmail = user.email; // Zaten küçük harfe çevrilmiş hali
+      _currentUserEmail = user.email;
 
-      // --- DEBUG BAŞLANGICI ---
-      print("--- ROL KONTROLÜ BAŞLIYOR ---");
-      print("Giriş Yapan Mail: '$_currentUserEmail'");
-
-      final doc = await FirebaseFirestore.instance.collection('dispenser').doc(widget.macAddress).get();
-      if (doc.exists) {
-        final ownerInDb = doc.data()?['owner_mail'];
-        print("Veritabanındaki Owner Mail: '$ownerInDb'");
-
-        if (ownerInDb != _currentUserEmail) {
-          print("!!! UYUŞMAZLIK VAR !!! Harf hatası veya boşluk olabilir.");
-        } else {
-          print("Mailler Eşleşiyor. Yetki verilmeli.");
-        }
-      } else {
-        print("Cihaz veritabanında bulunamadı.");
-      }
-      // --- DEBUG BİTİŞİ ---
-
+      // Rolü veritabanından çek
       _currentRole = await _databaseService.getUserRole(widget.macAddress, user.email);
     }
 
@@ -90,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
           };
         }).toList();
       } else {
-        // Veri yoksa varsayılan oluştur
+        // Veri yoksa varsayılan
         _sections = List.generate(4, (index) {
           return {
             'name': 'Bölme ${index + 1}',
@@ -99,13 +82,12 @@ class _HomeScreenState extends State<HomeScreen> {
           };
         });
 
-        // Sadece yetkili ise varsayılan ayarları kaydet
         if (_canEdit()) {
           await _saveSectionConfig();
         }
       }
 
-      // İzleyici bile olsa kendi telefonunda bildirimleri planlar (Local Notification)
+      // Local bildirimleri planla
       _notificationService.scheduleMedicationNotifications(_sections);
 
     } catch (e) {
@@ -113,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Sadece Owner ve Secondary çağırabilir
   Future<void> _saveSectionConfig() async {
     if (!_canEdit()) return;
 
@@ -128,7 +109,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
 
     await _databaseService.saveSectionConfig(widget.macAddress, serializableList);
-    // Veritabanı değiştikten sonra bildirimleri tekrar planla
     await _notificationService.scheduleMedicationNotifications(_sections);
   }
 
@@ -145,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveSectionConfig();
   }
 
-  // YETKİ KONTROLÜ
   bool _canEdit() {
     return _currentRole == DeviceRole.owner || _currentRole == DeviceRole.secondary;
   }
@@ -160,8 +139,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- KULLANICI YÖNETİMİ DİYALOGU (Sadece Owner) ---
+  // --- KULLANICI YÖNETİMİ DİYALOGU (GÜNCELLENMİŞ) ---
   void _showUserManagementDialog() {
+    final TextEditingController emailController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) {
@@ -175,52 +156,129 @@ class _HomeScreenState extends State<HomeScreen> {
             final secondaryUsers = List<String>.from(data['secondary_mails'] ?? []);
 
             return AlertDialog(
-              title: const Text('Kullanıcı Yönetimi'),
+              title: const Text('Erişim Yönetimi'),
               content: SizedBox(
                 width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (readOnlyUsers.isEmpty && secondaryUsers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text("Henüz başka kullanıcı yok."),
-                      ),
-
-                    // 1. İzleyiciler (Yetki Verilebilir)
-                    if (readOnlyUsers.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text('İzleyiciler (Yetki Bekleyenler)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                      ),
-                      ...readOnlyUsers.map((email) => ListTile(
-                        dense: true,
-                        title: Text(email),
-                        subtitle: const Text("Salt Okunur"),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.arrow_upward_rounded, color: Colors.green),
-                          tooltip: 'Yönetici Yap',
-                          onPressed: () async {
-                            // DatabaseService içindeki promoteToSecondary fonksiyonunu kullanıyoruz
-                            await _databaseService.promoteToSecondary(widget.macAddress, email);
+                    // Ekleme Kısmı
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: emailController,
+                            decoration: const InputDecoration(
+                              hintText: 'Kullanıcı maili...',
+                              labelText: 'Yetki Ver',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          style: IconButton.styleFrom(backgroundColor: Colors.green.shade50),
+                          icon: const Icon(Icons.person_add, color: Colors.green),
+                          tooltip: 'Ekle',
+                          onPressed: () {
+                            final mail = emailController.text.trim();
+                            if (mail.isNotEmpty) {
+                              _databaseService.addReadOnlyUser(widget.macAddress, mail);
+                              emailController.clear();
+                            }
                           },
                         ),
-                      )),
-                      const Divider(),
-                    ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
 
-                    // 2. Yöneticiler (Zaten Yetkili)
-                    if (secondaryUsers.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text('Yöneticiler', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text("Kullanıcı Listesi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                       ),
-                      ...secondaryUsers.map((email) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.verified_user, color: Colors.blue, size: 20),
-                        title: Text(email),
-                      )),
-                    ],
+                    ),
+
+                    // Kullanıcı Listesi
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          if (readOnlyUsers.isEmpty && secondaryUsers.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text("Henüz başka kullanıcı yok.", style: TextStyle(fontStyle: FontStyle.italic)),
+                            ),
+
+                          // 1. İzleyiciler (Yönetici Yap butonu var)
+                          ...readOnlyUsers.map((email) => Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              leading: const Icon(Icons.remove_red_eye, color: Colors.grey),
+                              title: Text(email, style: const TextStyle(fontSize: 13)),
+                              subtitle: const Text("İzleyici"),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_upward_rounded, color: Colors.green),
+                                    tooltip: 'Yönetici Yap',
+                                    onPressed: () async {
+                                      await _databaseService.promoteToSecondary(widget.macAddress, email);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    tooltip: 'Sil',
+                                    onPressed: () async {
+                                      await _databaseService.removeUser(widget.macAddress, email);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )),
+
+                          // 2. Yöneticiler (İzleyici Yap butonu EKLENDİ)
+                          ...secondaryUsers.map((email) => Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            color: Colors.blue.shade50,
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              leading: const Icon(Icons.verified_user, color: Colors.blue),
+                              title: Text(email, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              subtitle: const Text("Yönetici"),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // --- YENİ EKLENEN BUTON: AŞAĞI OK ---
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_downward_rounded, color: Colors.orange),
+                                    tooltip: 'İzleyici Yap (Rütbe Düşür)',
+                                    onPressed: () async {
+                                      await _databaseService.demoteToReadOnly(widget.macAddress, email);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    tooltip: 'Sil',
+                                    onPressed: () async {
+                                      await _databaseService.removeUser(widget.macAddress, email);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -237,9 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- ALARM AYARLARI DİYALOGU ---
-  // Not: İzleyiciler de bu menüye girebilir çünkü bu ayarlar (offset vb.)
-  // cihazın kendisine değil, telefondaki yerel uygulamaya (SharedPreferences) kaydedilir.
+  // --- ALARM AYARLARI ---
   Future<void> _showNotificationSettingsDialog() async {
     final settings = await _notificationService.getNotificationSettings();
     bool notificationsEnabled = settings['enabled'];
@@ -299,16 +355,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    // Yerel ayarları kaydet
                     await _notificationService.saveNotificationSettings(
                       enabled: notificationsEnabled,
                       offset: offset,
                     );
-                    // Bildirimleri tekrar planla (kendi telefonu için)
                     await _notificationService.scheduleMedicationNotifications(_sections);
-
                     if (mounted) Navigator.of(context).pop();
-
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Alarm ayarları kaydedildi.')),
                     );
@@ -323,7 +375,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -334,21 +385,18 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Cihaz Ayarları'),
         actions: [
-          // 1. KULLANICI YÖNETİMİ BUTONU (Sadece Owner Görebilir)
+          // Sadece Owner görebilir
           if (_currentRole == DeviceRole.owner)
             IconButton(
               icon: const Icon(Icons.manage_accounts_rounded),
-              tooltip: 'Kullanıcıları Yönet',
+              tooltip: 'Erişim Yönetimi',
               onPressed: _showUserManagementDialog,
             ),
-
-          // 2. ALARM AYARLARI BUTONU (Herkes Görebilir)
           IconButton(
             icon: const Icon(Icons.alarm_add_rounded, size: 30),
             tooltip: 'Alarm Ayarları',
             onPressed: _showNotificationSettingsDialog,
           ),
-
           const SizedBox(width: 8),
         ],
       ),
@@ -360,7 +408,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // İZLEYİCİ UYARISI
               if (isReadOnly)
                 Container(
                   width: double.infinity,
@@ -388,7 +435,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 )
               else
-              // BİLGİ KARTI (Sadece yetkililer için)
                 Card(
                   color: colorScheme.primaryContainer.withOpacity(0.6),
                   margin: const EdgeInsets.only(bottom: 30),
@@ -424,7 +470,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  // İZLEYİCİ İSE DOKUNMAYI ENGELLE
                   child: AbsorbPointer(
                     absorbing: isReadOnly,
                     child: CircularSelector(
@@ -472,7 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       isActive ? 'Saat: ${time.format(context)}' : 'Pasif',
                       style: theme.textTheme.bodyMedium?.copyWith(color: isActive ? colorScheme.onSurfaceVariant : Colors.grey),
                     ),
-                    // İZLEYİCİ İSE KİLİT GÖSTER, DEĞİLSE EDİT BUTONLARINI GÖSTER
                     trailing: isReadOnly
                         ? const Tooltip(
                       message: "Değiştirme yetkiniz yok",
