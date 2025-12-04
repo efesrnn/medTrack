@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dispenserapp/app/home_screen.dart';
 import 'package:dispenserapp/features/ble_provisioning/sync_screen.dart';
 import 'package:dispenserapp/app/relatives_screen.dart';
@@ -17,11 +16,13 @@ class MainHub extends StatefulWidget {
 
 class _MainHubState extends State<MainHub> {
   final AuthService _authService = AuthService();
+  final DatabaseService _dbService = DatabaseService();
   int _selectedIndex = 0;
-  Key _deviceListScreenKey = UniqueKey();
-  String? _userName;
 
-  late final List<Widget> _widgetOptions;
+  // Sürükle Bırak Modu Aktif mi?
+  bool _isDragMode = false;
+
+  AppUser? _currentUser;
 
   @override
   void initState() {
@@ -29,187 +30,191 @@ class _MainHubState extends State<MainHub> {
     _authService.getOrCreateUser().then((user) {
       if (user != null) {
         setState(() {
-          _userName = user.displayName;
+          _currentUser = user;
         });
       }
     });
-    _widgetOptions = <Widget>[
-      DeviceListScreen(key: _deviceListScreenKey),
-      const SyncScreen(),
-      const RelativesScreen(),
-    ];
   }
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      _isDragMode = false; // Sayfa değişince modu kapat
     });
   }
 
+  // Modu değiştiren fonksiyon
+  void _toggleDragMode(bool value) {
+    setState(() {
+      _isDragMode = value;
+    });
+    if (value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Düzenleme modu açıldı. Cihazları sürükleyebilirsiniz."),
+            duration: Duration(seconds: 1),
+          )
+      );
+    }
+  }
+
   Future<void> _signOut() async {
-    final bool? shouldSignOut = await showDialog<bool>(
+    await _authService.signOut();
+    final newUser = await _authService.getOrCreateUser();
+    setState(() {
+      _currentUser = newUser;
+    });
+    Navigator.of(context).pop();
+  }
+
+  void _showProfileMenu() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundImage: _currentUser?.photoURL != null
+                      ? NetworkImage(_currentUser!.photoURL!)
+                      : null,
+                  child: _currentUser?.photoURL == null
+                      ? Text(
+                    _currentUser?.displayName != null
+                        ? _currentUser!.displayName![0].toUpperCase()
+                        : "U",
+                    style: const TextStyle(fontSize: 30, color: Colors.white),
+                  )
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                const Text("Logged as", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  _currentUser?.displayName ?? "Kullanıcı",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _signOut,
+                    icon: const Icon(Icons.logout),
+                    label: const Text("Çıkış Yap"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                      foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreateFolderDialog() {
+    final controller = TextEditingController();
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Emin misiniz?',textAlign: TextAlign.center),
-        content: const Text('Farklı bir google hesabıyla girmek istediğinize emin misiniz?',textAlign: TextAlign.center),
+        title: const Text("Yeni Oda Oluştur"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: "Örn: 102 Nolu Oda"),
+          autofocus: true,
+        ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hayır'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Evet'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("İptal")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty && _currentUser != null) {
+                _dbService.createGroup(_currentUser!.uid, controller.text.trim());
+              }
+              Navigator.pop(context);
+            },
+            child: const Text("Oluştur"),
+          )
         ],
       ),
     );
-
-    if (shouldSignOut == true) {
-      await _authService.signOut();
-      final newUser = await _authService.getOrCreateUser();
-      if (newUser != null) {
-        setState(() {
-          _userName = newUser.displayName;
-          _deviceListScreenKey = UniqueKey();
-          _widgetOptions[0] = DeviceListScreen(key: _deviceListScreenKey);
-        });
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    const double navigationBarHeight = 65; // BottomNavigationBar'ın yüksekliğini ayarlamak için
+
+    Widget currentScreen;
+    if (_selectedIndex == 0) {
+      currentScreen = DeviceListScreen(
+        isDragMode: _isDragMode,
+        onModeChanged: _toggleDragMode,
+      );
+    } else if (_selectedIndex == 1) {
+      currentScreen = const SyncScreen();
+    } else {
+      currentScreen = const RelativesScreen();
+    }
 
     return Scaffold(
       appBar: AppBar(
-        // AppBar'ın yükseltisini kaldırarak daha modern bir görünüm (isteğe bağlı)
         elevation: 0,
-        backgroundColor: theme.scaffoldBackgroundColor, // Arkaplan rengini kullan
-        foregroundColor: colorScheme.onSurface, // İkon ve yazı rengi
-
-        // Kullanıcı Adı: CircleAvatar ile daha şık bir profil görünümü
-        leading: _userName != null
-            ? Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Center(
-            child: GestureDetector(
-              onTap: () {
-                // Tek tıklandığında SnackBar'ı göster
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    // Bilgi kutucuğunda gözükecek tam isim
-                    content: Center(
-                      child: Text(
-                        'Google kullanıcı adı: $_userName',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onPrimary, // Metin rengi
-                        ),
-                      ),
-                    ),
-                    // SnackBar'ın stilini ayarlıyoruz
-                    backgroundColor: colorScheme.primary, // Arkaplan rengi
-                    duration: const Duration(milliseconds: 1500), // 1.5 saniye sonra kaybol
-                    behavior: SnackBarBehavior.floating, // Floating stil
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                );
-              },
-              child: CircleAvatar(
-                backgroundColor: colorScheme.primary.withOpacity(0.1),
-                child: Text(
-                  // Kullanıcı adının ilk harfi
-                  _userName![0].toUpperCase(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        )
-            : null,
-
-        // Başlık
-        title: Text(
-          'Cihazlarım',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.7
-          ),
+        backgroundColor: theme.scaffoldBackgroundColor,
+        foregroundColor: colorScheme.onSurface,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.settings, size: 28),
+          onPressed: _showProfileMenu,
         ),
-
-        // Aksiyonlar
+        title: Text(
+          _selectedIndex == 0
+              ? (_isDragMode ? 'Düzenleme Modu' : 'Cihazlarım')
+              : (_selectedIndex == 1 ? 'Senkronizasyon' : 'Yakınlarım'),
+          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Çıkış Yap',
-            onPressed: _signOut,
-            color: colorScheme.error, // Çıkış ikonuna dikkat çekici bir renk
-          ),
-          const SizedBox(width: 8), // Sağ kenardan boşluk
+          if (_selectedIndex == 0)
+            IconButton(
+              // --- DEĞİŞİKLİK BURADA YAPILDI ---
+              icon: Icon(
+                _isDragMode ? Icons.close : Icons.menu, // Drag modu açıksa Çarpı (Close), kapalıysa Menü (3 çizgi)
+                size: 30,
+                color: _isDragMode ? colorScheme.error : colorScheme.onSurface, // Açıkken kırmızımsı, kapalıyken normal renk
+              ),
+              tooltip: _isDragMode ? 'Düzenlemeyi Bitir' : 'Düzenle / Taşı',
+              onPressed: () => _toggleDragMode(!_isDragMode),
+            ),
+          const SizedBox(width: 8),
         ],
       ),
-
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
-      ),
-
-      // BottomNavigationBar İyileştirmeleri
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: Colors.grey.shade300, // Hafif bir üst çizgi
-              width: 0.5,
-            ),
-          ),
-        ),
-        height: navigationBarHeight,
-        child: BottomNavigationBar(
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.devices_other_rounded, size: 26), // İkon büyüklüğü
-              label: 'Cihazlarım',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.sync_rounded, size: 26),
-              label: 'Senkronizasyon',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people_alt_rounded, size: 26),
-              label: 'Yakınlarım',
-            ),
-          ],
-          currentIndex: _selectedIndex,
-
-          // Renkler
-          selectedItemColor: colorScheme.primary, // Temel renk
-          unselectedItemColor: Colors.grey.shade600, // Daha koyu gri
-          backgroundColor: theme.scaffoldBackgroundColor, // Arkaplan rengi
-
-          // Tipografi
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.bold, // Seçili etiketi kalın yap
-            fontSize: 12,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.normal,
-            fontSize: 12,
-          ),
-
-          onTap: _onItemTapped,
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed, // Daha iyi kontrol için
-        ),
+      body: currentScreen,
+      floatingActionButton: (_selectedIndex == 0 && _isDragMode)
+          ? FloatingActionButton.extended(
+        onPressed: _showCreateFolderDialog,
+        icon: const Icon(Icons.create_new_folder),
+        label: const Text("Oda Ekle"),
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+      )
+          : null,
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(icon: Icon(Icons.devices_other_rounded), label: 'Cihazlarım'),
+          BottomNavigationBarItem(icon: Icon(Icons.sync_rounded), label: 'Senkronizasyon'),
+          BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'Yakınlarım'),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: colorScheme.primary,
+        onTap: _onItemTapped,
       ),
     );
   }

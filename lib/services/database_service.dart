@@ -243,4 +243,94 @@ class DatabaseService {
       print('Update list error: $e');
     }
   }
+  // --- YENİ EKLENEN: GRUPLAMA (KLASÖR) SİSTEMİ ---
+
+  // Yeni bir klasör oluştur
+  Future<void> createGroup(String uid, String groupName) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(uid);
+      final snapshot = await userDoc.get();
+
+      List<dynamic> groups = snapshot.data()?['device_groups'] ?? [];
+
+      // Basit bir ID oluştur (timestamp bazlı)
+      String groupId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      groups.add({
+        'id': groupId,
+        'name': groupName,
+        'devices': [], // İçindeki cihaz MAC adresleri
+      });
+
+      await userDoc.update({'device_groups': groups});
+    } catch (e) {
+      print('Error creating group: $e');
+    }
+  }
+
+  // Klasörü sil (İçindeki cihazlar ana listeye düşer)
+  Future<void> deleteGroup(String uid, String groupId) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(uid);
+      final snapshot = await userDoc.get();
+
+      List<dynamic> groups = List.from(snapshot.data()?['device_groups'] ?? []);
+      groups.removeWhere((g) => g['id'] == groupId);
+
+      await userDoc.update({'device_groups': groups});
+    } catch (e) {
+      print('Error deleting group: $e');
+    }
+  }
+
+  // Klasör ismini değiştir
+  Future<void> renameGroup(String uid, String groupId, String newName) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(uid);
+      final snapshot = await userDoc.get();
+
+      List<dynamic> groups = List.from(snapshot.data()?['device_groups'] ?? []);
+      var group = groups.firstWhere((g) => g['id'] == groupId, orElse: () => null);
+
+      if (group != null) {
+        group['name'] = newName;
+        await userDoc.update({'device_groups': groups});
+      }
+    } catch (e) {
+      print('Error renaming group: $e');
+    }
+  }
+
+  // Cihazı bir klasöre taşı (Sürükle-Bırak işlemi için)
+  Future<void> moveDeviceToGroup(String uid, String macAddress, String targetGroupId) async {
+    try {
+      final userDoc = _firestore.collection('users').doc(uid);
+      final snapshot = await userDoc.get();
+
+      List<dynamic> groups = List.from(snapshot.data()?['device_groups'] ?? []);
+
+      // 1. Adım: Cihazı mevcut olduğu tüm gruplardan çıkar
+      for (var group in groups) {
+        List<dynamic> devices = List.from(group['devices'] ?? []);
+        devices.remove(macAddress);
+        group['devices'] = devices;
+      }
+
+      // 2. Adım: Eğer hedef bir grup ise (ana ekran değilse), o gruba ekle
+      if (targetGroupId.isNotEmpty) {
+        var targetGroup = groups.firstWhere((g) => g['id'] == targetGroupId, orElse: () => null);
+        if (targetGroup != null) {
+          List<dynamic> devices = List.from(targetGroup['devices'] ?? []);
+          if (!devices.contains(macAddress)) {
+            devices.add(macAddress);
+          }
+          targetGroup['devices'] = devices;
+        }
+      }
+
+      await userDoc.update({'device_groups': groups});
+    } catch (e) {
+      print('Error moving device: $e');
+    }
+  }
 }

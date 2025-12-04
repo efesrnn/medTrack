@@ -7,9 +7,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AppUser {
   final String uid;
   final String? displayName;
-  final String email;
+  final String? photoURL;
+  final String? email; // EKLENDİ: Email alanı eklendi
 
-  AppUser({required this.uid, this.displayName, required this.email});
+  AppUser({
+    required this.uid,
+    this.displayName,
+    this.photoURL,
+    this.email
+  });
 }
 
 class AuthService {
@@ -23,12 +29,15 @@ class AuthService {
     String? uid = prefs.getString('user_uid');
     String? email;
     String? displayName;
+    String? photoURL;
 
     if (uid == null) {
       try {
+        // Yeni kullanıcı için Google Girişi
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-        if (googleUser == null) return null;
-
+        if (googleUser == null) {
+          return null;
+        }
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
@@ -37,45 +46,56 @@ class AuthService {
         final UserCredential userCredential = await _auth.signInWithCredential(credential);
 
         uid = userCredential.user?.uid;
-        // KRİTİK DÜZELTME: Email'i her zaman küçük harfe çeviriyoruz
-        email = userCredential.user?.email?.toLowerCase();
+        email = userCredential.user?.email;
         displayName = userCredential.user?.displayName;
+        photoURL = userCredential.user?.photoURL;
 
-        if (uid != null && email != null) {
+        if (uid != null) {
           await prefs.setString('user_uid', uid);
-
+          // Firestore'a kaydet
           await _firestore.collection('users').doc(uid).set({
             'createdAt': FieldValue.serverTimestamp(),
             'lastLogin': FieldValue.serverTimestamp(),
-            'email': email, // Veritabanına da küçük harfle kaydediyoruz
+            'email': email,
             'displayName': displayName,
-            'photoURL': userCredential.user?.photoURL,
+            'photoURL': photoURL,
           }, SetOptions(merge: true));
         }
       } catch (e) {
-        print('Google giriş hatası: $e');
+        print('Error with Google sign-in: $e');
         return null;
       }
     } else {
+      // Mevcut kullanıcı, verileri Firestore'dan çek
       try {
         final userDoc = await _firestore.collection('users').doc(uid).get();
         if (userDoc.exists) {
-          // Veritabanından gelen veriyi de garantiye alalım
-          email = (userDoc.data()!['email'] as String?)?.toLowerCase();
-          displayName = userDoc.data()!['displayName'] as String?;
+          final data = userDoc.data()!;
+          email = data['email'] as String?;
+          displayName = data['displayName'] as String?;
+          photoURL = data['photoURL'] as String?;
         }
+
         await _firestore.collection('users').doc(uid).update({
           'lastLogin': FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        print('Kullanıcı bilgisi çekme hatası: $e');
+        print('Error fetching user email or updating login: $e');
       }
     }
 
     if (uid != null && email != null) {
-      // Listeleri senkronize et
       await _dbService.updateUserDeviceList(uid, email);
-      return AppUser(uid: uid, displayName: displayName, email: email);
+    }
+
+    if (uid != null) {
+      // EKLENDİ: email parametresi AppUser'a gönderiliyor
+      return AppUser(
+          uid: uid,
+          displayName: displayName,
+          photoURL: photoURL,
+          email: email
+      );
     }
     return null;
   }
