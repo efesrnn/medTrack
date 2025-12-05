@@ -98,7 +98,217 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _saveSectionConfig(); // This will also trigger rescheduling notifications
   }
+<<<<<<< Updated upstream
   
+=======
+
+  bool _canEdit() {
+    return _currentRole == DeviceRole.owner || _currentRole == DeviceRole.secondary;
+  }
+
+  void _showReadOnlyWarning() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Sadece İzleyici modundasınız. Değişiklik yapmak için cihaz sahibinden yetki isteyin.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // --- LED TEST DİYALOGU (YENİ) ---
+  void _showLedTestDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("LED Test Paneli"),
+        content: const Text("ESP32 üzerindeki mavi ışığı kontrol ederek bağlantıyı test edin.\n\n(Not: Işık yanmıyorsa cihazın internet bağlantısını kontrol edin.)"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // KAPAT
+              _databaseService.sendCommand(widget.macAddress, "LED_OFF");
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Söndürme komutu gönderildi.'))
+              );
+            },
+            child: const Text("SÖNDÜR", style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () {
+              // AÇ
+              _databaseService.sendCommand(widget.macAddress, "LED_ON");
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Yakma komutu gönderildi.'))
+              );
+            },
+            child: const Text("YAK", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- KULLANICI YÖNETİMİ DİYALOGU (GÜNCELLENMİŞ) ---
+  void _showUserManagementDialog() {
+    final TextEditingController emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('dispenser').doc(widget.macAddress).snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            final readOnlyUsers = List<String>.from(data['read_only_mails'] ?? []);
+            final secondaryUsers = List<String>.from(data['secondary_mails'] ?? []);
+
+            return AlertDialog(
+              title: const Text('Erişim Yönetimi'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Ekleme Kısmı
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: emailController,
+                            decoration: const InputDecoration(
+                              hintText: 'Kullanıcı maili...',
+                              labelText: 'Yetki Ver',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          style: IconButton.styleFrom(backgroundColor: Colors.green.shade50),
+                          icon: const Icon(Icons.person_add, color: Colors.green),
+                          tooltip: 'Ekle',
+                          onPressed: () {
+                            final mail = emailController.text.trim();
+                            if (mail.isNotEmpty) {
+                              _databaseService.addReadOnlyUser(widget.macAddress, mail);
+                              emailController.clear();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text("Kullanıcı Listesi", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                      ),
+                    ),
+
+                    // Kullanıcı Listesi
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          if (readOnlyUsers.isEmpty && secondaryUsers.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Text("Henüz başka kullanıcı yok.", style: TextStyle(fontStyle: FontStyle.italic)),
+                            ),
+
+                          // 1. İzleyiciler (Yönetici Yap butonu var)
+                          ...readOnlyUsers.map((email) => Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              leading: const Icon(Icons.remove_red_eye, color: Colors.grey),
+                              title: Text(email, style: const TextStyle(fontSize: 13)),
+                              subtitle: const Text("İzleyici"),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_upward_rounded, color: Colors.green),
+                                    tooltip: 'Yönetici Yap',
+                                    onPressed: () async {
+                                      await _databaseService.promoteToSecondary(widget.macAddress, email);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    tooltip: 'Sil',
+                                    onPressed: () async {
+                                      await _databaseService.removeUser(widget.macAddress, email);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )),
+
+                          // 2. Yöneticiler (İzleyici Yap butonu EKLENDİ)
+                          ...secondaryUsers.map((email) => Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            color: Colors.blue.shade50,
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              leading: const Icon(Icons.verified_user, color: Colors.blue),
+                              title: Text(email, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              subtitle: const Text("Yönetici"),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_downward_rounded, color: Colors.orange),
+                                    tooltip: 'İzleyici Yap (Rütbe Düşür)',
+                                    onPressed: () async {
+                                      await _databaseService.demoteToReadOnly(widget.macAddress, email);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    tooltip: 'Sil',
+                                    onPressed: () async {
+                                      await _databaseService.removeUser(widget.macAddress, email);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Kapat'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- ALARM AYARLARI ---
+>>>>>>> Stashed changes
   Future<void> _showNotificationSettingsDialog() async {
     final settings = await _notificationService.getNotificationSettings();
     bool notificationsEnabled = settings['enabled'];
@@ -181,8 +391,29 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Cihaz Ayarları'),
         actions: [
+<<<<<<< Updated upstream
           IconButton(
             icon: const Icon(Icons.alarm_add_rounded,size: 50,),
+=======
+          // 1. LED Test Butonu (HERKES İÇİN - Test Amaçlı)
+          IconButton(
+            icon: const Icon(Icons.lightbulb, color: Colors.amber), // Test İkonu
+            tooltip: 'LED Testi',
+            onPressed: _showLedTestDialog,
+          ),
+
+          // 2. Kullanıcı Yönetimi (Sadece Owner Görebilir)
+          if (_currentRole == DeviceRole.owner)
+            IconButton(
+              icon: const Icon(Icons.manage_accounts_rounded),
+              tooltip: 'Erişim Yönetimi',
+              onPressed: _showUserManagementDialog,
+            ),
+
+          // 3. Alarm Ayarları
+          IconButton(
+            icon: const Icon(Icons.alarm_add_rounded),
+>>>>>>> Stashed changes
             tooltip: 'Alarm Ayarları',
             onPressed: _showNotificationSettingsDialog,
           ),

@@ -29,6 +29,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.13.1
+  flutter_libserialport: ^0.5.0
 
   flutter_lints: ^5.0.0
 
