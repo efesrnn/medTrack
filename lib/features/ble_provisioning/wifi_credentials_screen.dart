@@ -1,6 +1,4 @@
 import 'dart:convert';
-
-import 'package:dispenserapp/services/auth_service.dart';
 import 'package:dispenserapp/features/ble_provisioning/ble_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -15,94 +13,60 @@ class WifiCredentialsScreen extends StatefulWidget {
 }
 
 class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
-  final _ssidController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
-  bool _isSending = false;
-  String _status = '';
+  String _status = 'Bağlı, komut bekleniyor...';
+  BluetoothCharacteristic? _statusCharacteristic;
+  bool _isReady = false;
 
   @override
-  void dispose() {
-    _ssidController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _discoverServices();
   }
 
-  Future<void> _sendCredentials() async {
-    if (_ssidController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SSID ve şifre boş olamaz.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSending = true;
-      _status = 'Veriler gönderiliyor...';
-    });
-
+  // Cihazdaki servisleri ve karakteristiği bulur
+  Future<void> _discoverServices() async {
     try {
+      // Servisleri keşfet
       final services = await widget.device.discoverServices();
+
+      // ble_constants.dart dosyasındaki SERVICE_UUID'yi bul
       final service = services.firstWhere((s) => s.uuid == SERVICE_UUID);
 
-      final ssidCharacteristic = service.characteristics
-          .firstWhere((c) => c.uuid == WIFI_SSID_CHARACTERISTIC_UUID);
-      final passwordCharacteristic = service.characteristics
-          .firstWhere((c) => c.uuid == WIFI_PASSWORD_CHARACTERISTIC_UUID);
-      final uidCharacteristic = service.characteristics
-          .firstWhere((c) => c.uuid == USER_UID_CHARACTERISTIC_UUID);
-      final statusCharacteristic = service.characteristics
+      // STATUS karakteristiğini bul
+      final characteristic = service.characteristics
           .firstWhere((c) => c.uuid == STATUS_CHARACTERISTIC_UUID);
 
-      await ssidCharacteristic.write(utf8.encode(_ssidController.text));
-      await passwordCharacteristic.write(utf8.encode(_passwordController.text));
-
-      final AppUser = await _authService.getOrCreateUser();
-      if (AppUser != null) {
-        await uidCharacteristic.write(utf8.encode(AppUser.uid));
-      }
-
-      // Listen for status updates
-      await statusCharacteristic.setNotifyValue(true);
-      statusCharacteristic.value.listen((value) {
-        final status = utf8.decode(value);
-        if(mounted) {
-          setState(() {
-            _status = 'Cihaz durumu: $status';
-          });
-        }
-        
-        if (status == 'FIREBASE_OK') {
-           if(mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Kurulum başarıyla tamamlandı!')),
-            );
-            Navigator.pop(context); // Go back to the sync screen
-           }
-        }
-      });
-
-      // Send the 'SAVE' command
-      await statusCharacteristic.write(utf8.encode('SAVE'));
       setState(() {
-        _status = 'Veriler gönderildi, cihazdan onay bekleniyor...';
+        _statusCharacteristic = characteristic;
+        _isReady = true;
+      });
+    } catch (e) {
+      setState(() {
+        _status = 'Hata: Servis veya Karakteristik bulunamadı.\nUUID\'leri kontrol edin.';
+      });
+    }
+  }
+
+  // LED komutunu gönderir
+  Future<void> _sendLedCommand(bool turnOn) async {
+    if (_statusCharacteristic == null) return;
+
+    // "1" = AÇ, "0" = KAPAT
+    String command = turnOn ? "1" : "0";
+
+    try {
+      await _statusCharacteristic!.write(utf8.encode(command));
+      setState(() {
+        _status = turnOn ? 'LED Açık komutu gönderildi (1)' : 'LED Kapalı komutu gönderildi (0)';
       });
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(turnOn ? 'Işık Açılıyor...' : 'Işık Kapanıyor...')),
+      );
     } catch (e) {
-      if(mounted) {
-        setState(() {
-          _status = 'Hata: $e';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Veri gönderme hatası: $e')),
-        );
-      }
-    } finally {
-       if(mounted) {
-        setState(() {
-          _isSending = false;
-        });
-       }
+      setState(() {
+        _status = 'Gönderme Hatası: $e';
+      });
     }
   }
 
@@ -110,33 +74,56 @@ class _WifiCredentialsScreenState extends State<WifiCredentialsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Wi-Fi Bilgileri - ${widget.device.platformName}'),
+        title: Text('Test Modu - ${widget.device.platformName}'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _ssidController,
-              decoration: const InputDecoration(labelText: 'Wi-Fi Adı (SSID)'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Wi-Fi Şifresi'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _isSending ? null : _sendCredentials,
-              child: _isSending
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Cihaza Gönder'),
-            ),
-            const SizedBox(height: 20),
-            if(_status.isNotEmpty)
-              Text(_status, style: Theme.of(context).textTheme.bodyMedium,),
-          ],
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _status,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 40),
+              // Eğer bağlantı hazır değilse yükleniyor göster
+              if (!_isReady) const CircularProgressIndicator(),
+
+              if (_isReady) ...[
+                // AÇ BUTONU
+                SizedBox(
+                  width: 200,
+                  height: 60,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => _sendLedCommand(true),
+                    icon: const Icon(Icons.flash_on),
+                    label: const Text('LED AÇ', style: TextStyle(fontSize: 20)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // KAPAT BUTONU
+                SizedBox(
+                  width: 200,
+                  height: 60,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => _sendLedCommand(false),
+                    icon: const Icon(Icons.flash_off),
+                    label: const Text('LED KAPAT', style: TextStyle(fontSize: 20)),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

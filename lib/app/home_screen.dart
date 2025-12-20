@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> _sections = [];
   bool _isLoading = true;
+  bool _isRinging = false;
 
   // Varsayılan rol
   DeviceRole _currentRole = DeviceRole.readOnly;
@@ -73,11 +74,11 @@ class _HomeScreenState extends State<HomeScreen> {
           };
         }).toList();
       } else {
-        // Veri yoksa varsayılan
-        _sections = List.generate(4, (index) {
+        // Veri yoksa varsayılan olarak 3 bölme oluştur
+        _sections = List.generate(3, (index) {
           return {
-            'name': 'Bölme ${index + 1}',
-            'time': TimeOfDay(hour: (8 + 2 * index) % 24, minute: 0),
+            'name': 'İlaç ${index + 1}', // "Bölme" yerine "İlaç" daha samimi olabilir
+            'time': TimeOfDay(hour: (8 + 4 * index) % 24, minute: 0), // Saatleri biraz daha aralıklı yaydık
             'isActive': true,
           };
         });
@@ -124,6 +125,27 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     _saveSectionConfig();
   }
+  Future<void> _handleBuzzer() async {
+    setState(() {
+      _isRinging = !_isRinging;
+    });
+
+    // DatabaseService'e eklediğiniz fonksiyonu çağırıyoruz
+    // Eğer 2. parametre true ise öttür, false ise sustur.
+    await _databaseService.toggleBuzzer(widget.macAddress, _isRinging);
+
+    // Eğer ötmeye başladıysa, 3 saniye sonra otomatik durdurma mantığı (Opsiyonel ama önerilir)
+    if (_isRinging) {
+      Future.delayed(const Duration(seconds: 3), () async {
+        if (mounted && _isRinging) {
+          setState(() {
+            _isRinging = false;
+          });
+          await _databaseService.toggleBuzzer(widget.macAddress, false);
+        }
+      });
+    }
+  }
 
   bool _canEdit() {
     return _currentRole == DeviceRole.owner || _currentRole == DeviceRole.secondary;
@@ -138,6 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
 
   // --- KULLANICI YÖNETİMİ DİYALOGU (GÜNCELLENMİŞ) ---
   void _showUserManagementDialog() {
@@ -434,6 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 )
+
               else
                 Card(
                   color: colorScheme.primaryContainer.withOpacity(0.6),
@@ -482,6 +506,33 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               const SizedBox(height: 30),
+              // Sadece yetkili kişiler (Owner/Secondary) buzzerı çaldırabilsin
+              if (!isReadOnly)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: Center(
+                    child: SizedBox(
+                      width: 200, // Buton genişliği
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _handleBuzzer,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isRinging ? Colors.red : colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        icon: Icon(_isRinging ? Icons.stop_circle_outlined : Icons.wifi_tethering),
+                        label: Text(
+                          _isRinging ? "Sesi Durdur" : "Cihazı Bul / Öttür",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(

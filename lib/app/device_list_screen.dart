@@ -159,6 +159,27 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
     );
   }
 
+  // YENİ: Cihazı listeden gizleme onayı
+  void _showHideDeviceDialog(String uid, String deviceId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cihazı Gizle"),
+        content: const Text("Bu cihaz listenizden kaldırılacak ancak yetkileriniz saklı kalacaktır. Tekrar eklemek için '+' butonunu kullanabilirsiniz."),
+        actions: [
+          TextButton(child: const Text("İptal"), onPressed: () => Navigator.pop(ctx)),
+          TextButton(
+            child: const Text("Kaldır", style: TextStyle(color: Colors.red)),
+            onPressed: () {
+              _dbService.hideDevice(uid, deviceId);
+              Navigator.pop(ctx);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<AppUser?>(
@@ -202,9 +223,15 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         if (!userSnapshot.hasData || !userSnapshot.data!.exists) return const CircularProgressIndicator();
 
         final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-        final List<dynamic> owned = userData['owned_dispensers'] ?? [];
-        final List<dynamic> secondary = userData['secondary_dispensers'] ?? [];
-        final List<dynamic> readOnly = userData['read_only_dispensers'] ?? [];
+
+        // GÖRÜNMEZ CİHAZLARI FİLTRELEME
+        final List<dynamic> unvisibleList = userData['unvisible_devices'] ?? [];
+        bool isVisible(dynamic mac) => !unvisibleList.contains(mac.toString());
+
+        // Listeleri filtreleyerek alıyoruz
+        final List<dynamic> owned = (userData['owned_dispensers'] ?? []).where(isVisible).toList();
+        final List<dynamic> secondary = (userData['secondary_dispensers'] ?? []).where(isVisible).toList();
+        final List<dynamic> readOnly = (userData['read_only_dispensers'] ?? []).where(isVisible).toList();
         final List<dynamic> deviceGroups = userData['device_groups'] ?? [];
 
         final List<Map<String, dynamic>> allDevices = [];
@@ -212,6 +239,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         for (var mac in secondary) if (!allDevices.any((d) => d['mac'] == mac)) allDevices.add({'mac': mac, 'role': 'secondary'});
         for (var mac in readOnly) if (!allDevices.any((d) => d['mac'] == mac)) allDevices.add({'mac': mac, 'role': 'readOnly'});
 
+        // Filtrelenmiş listeye göre boş durumu kontrolü
         if (allDevices.isEmpty && deviceGroups.isEmpty) {
           return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text("Henüz bir cihazınız yok.", textAlign: TextAlign.center)));
         }
@@ -234,13 +262,11 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cihaz ana listeye alındı.")));
           },
           builder: (context, candidateData, rejectedData) {
-            // Sürükleme anında arka plan rengini yumuşakça değiştir
-            // Eğer bir cihazı boşluğa sürüklüyorsanız "kırmızımsı/turuncu", değilse şeffaf
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
               color: candidateData.isNotEmpty
-                  ? Colors.red.withOpacity(0.05) // Silme alanı efekti
+                  ? Colors.red.withOpacity(0.05)
                   : Colors.transparent,
               child: ListView(
                 padding: const EdgeInsets.only(top: 20.0, bottom: 80, left: 16, right: 16),
@@ -263,14 +289,14 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "Düzenlemek için sürükleyin. Klasörden çıkarmak için cihazı dışarı (boşluğa) bırakın.",
+                              "Düzenlemek için sürükleyin. Cihazı listeden kaldırmak için sağdaki çöp kutusuna basın.",
                               style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    secondChild: const SizedBox(width: double.infinity), // Boş alan
+                    secondChild: const SizedBox(width: double.infinity),
                   ),
 
                   // KLASÖRLER
@@ -290,7 +316,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                     return _buildDraggableOrNormalCard(uid, device['mac'], device['role'], isInsideGroup: false);
                   }).toList(),
 
-                  // Alt boşluk (bırakma alanı için)
                   const SizedBox(height: 150),
                 ],
               ),
@@ -301,16 +326,21 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
     );
   }
 
-  // --- KLASÖR KARTI (ANIMASYONLU & GENİŞ HITBOX) ---
+  // --- KLASÖR KARTI ---
   Widget _buildGroupCard(String uid, Map<String, dynamic> group, List<Map<String, dynamic>> allDevices) {
     String groupId = group['id'] ?? "";
     String groupName = group['name'];
     List<dynamic> groupMacs = group['devices'] ?? [];
 
-    // Kartın kendisi
+    // GÖRÜNMEZLERİ BURADA DA FİLTRELEMEK GEREKİR
+    // Eğer bir cihaz gruba eklenmiş ama sonradan gizlenmişse, grupta da görünmemeli.
+    // Ancak üstteki allDevices zaten filtrelenmiş olduğu için,
+    // allDevices içinde olmayan mac'leri göstermeyeceğiz.
+    List<dynamic> visibleGroupMacs = groupMacs.where((mac) => allDevices.any((d) => d['mac'] == mac)).toList();
+
     Widget cardContent = Card(
       elevation: 4,
-      margin: EdgeInsets.zero, // Margini dışarıdaki Container'a vereceğiz (Hitbox için)
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
         side: BorderSide(
@@ -332,7 +362,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               child: Icon(Icons.meeting_room_rounded, color: Colors.orange.shade800, size: 28),
             ),
             title: Text(groupName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            subtitle: Text("${groupMacs.length} Cihaz", style: TextStyle(color: Colors.grey.shade600)),
+            subtitle: Text("${visibleGroupMacs.length} Cihaz", style: TextStyle(color: Colors.grey.shade600)),
             trailing: widget.isDragMode
                 ? Row(
               mainAxisSize: MainAxisSize.min,
@@ -348,7 +378,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               ],
             )
                 : null,
-            children: groupMacs.map((mac) {
+            children: visibleGroupMacs.map((mac) {
               var deviceEntry = allDevices.firstWhere((d) => d['mac'] == mac, orElse: () => {'mac': mac, 'role': 'unknown'});
               return _buildDraggableOrNormalCard(uid, mac.toString(), deviceEntry['role'], isInsideGroup: true);
             }).toList(),
@@ -357,32 +387,26 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       ),
     );
 
-    // Eğer Düzenleme Modundaysak DragTarget ile sarıyoruz
     if (widget.isDragMode) {
       return DragTarget<String>(
         onWillAccept: (data) => data != null,
         onAccept: (macAddress) {
           _dbService.moveDeviceToGroup(uid, macAddress, groupId);
-          // Haptic feedback (titreşim) eklenebilir
           HapticFeedback.lightImpact();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cihaz $groupName odasına taşındı"), duration: const Duration(milliseconds: 800)));
         },
         builder: (context, candidateData, rejectedData) {
           final isHovering = candidateData.isNotEmpty;
-
-          // SMOOTH ANIMASYON: Üzerine gelince büyüme efekti
           return TweenAnimationBuilder<double>(
             duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutBack, // Yaylanma efekti
+            curve: Curves.easeOutBack,
             tween: Tween<double>(begin: 1.0, end: isHovering ? 1.05 : 1.0),
             builder: (context, scale, child) {
               return Transform.scale(
                 scale: scale,
                 child: Container(
-                  // GENİŞ HITBOX: Kartın etrafında şeffaf boşluk bırakıyoruz
-                  // Böylece kullanıcı tam karta dokunmasa bile algılıyor.
                   margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.symmetric(vertical: 4), // Hitbox payı
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   color: Colors.transparent,
                   child: cardContent,
                 ),
@@ -393,44 +417,32 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       );
     }
 
-    // Normal modda sadece marginli kart
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: cardContent,
     );
   }
 
-  // --- CİHAZ KARTI (SÜRÜKLENEBİLİR & GHOST EFFECT) ---
+  // --- CİHAZ KARTI ---
   Widget _buildDraggableOrNormalCard(String uid, String macAddress, String role, {required bool isInsideGroup}) {
-    // Normal Kart Görünümü (Child)
     Widget card = _buildDeviceCardUI(
+      uid, // UID EKLENDİ
       macAddress,
       role,
       isInsideGroup: isInsideGroup,
-      interactive: !widget.isDragMode, // Drag modunda tıklamayı kapat
-      // Artık long press'i Draggable kendi hallediyor, buraya boş veriyoruz
+      interactive: !widget.isDragMode,
       onLongPress: () {},
     );
 
-    // Hata düzeltmesi: Artık her zaman LongPressDraggable döndürüyoruz.
-    // Böylece basılı tuttuğunda widget değişmiyor, sadece mod açılıyor ve
-    // sürükleme kopmadan devam ediyor.
     return LongPressDraggable<String>(
       data: macAddress,
-      // Basılı tutma süresi (Standart Android/iOS hissi için 300-400ms iyidir)
       delay: const Duration(milliseconds: 300),
-
-      // Sürükleme başladığı AN modu aktifleştiriyoruz
       onDragStarted: () {
         if (!widget.isDragMode) {
           widget.onModeChanged(true);
         }
       },
-
-      // Sürüklerken orijinal kartın yeri
       childWhenDragging: Opacity(opacity: 0.3, child: card),
-
-      // Sürüklenen "Hayalet" Kart
       feedback: Material(
         color: Colors.transparent,
         child: SizedBox(
@@ -463,8 +475,8 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   }
 
   // --- CİHAZ UI ---
-  Widget _buildDeviceCardUI(String macAddress, String role,
-      {required bool isInsideGroup, required bool interactive, required VoidCallback onLongPress}) {
+  Widget _buildDeviceCardUI(String uid, String macAddress, String role, // uid parametresi eklendi
+          {required bool isInsideGroup, required bool interactive, required VoidCallback onLongPress}) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('dispenser').doc(macAddress).snapshots(),
       builder: (context, deviceSnapshot) {
@@ -477,7 +489,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           exists = true;
         }
 
-        // Renkler
         Color roleColor;
         String roleText;
         IconData roleIcon;
@@ -528,7 +539,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                   );
                 }
                     : null,
-                onLongPress: onLongPress, // Düzenleme modunu tetikle
+                onLongPress: onLongPress,
                 borderRadius: BorderRadius.circular(22),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
@@ -586,8 +597,21 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                           ],
                         ),
                       ),
+                      // DÜZENLEME MODU KONTROLLERİ
                       if (widget.isDragMode)
-                        const Icon(Icons.drag_indicator, color: Colors.grey)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 1. ÇÖP KUTUSU (GİZLEME)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              tooltip: "Listeden Gizle",
+                              onPressed: () => _showHideDeviceDialog(uid, macAddress),
+                            ),
+                            // 2. SÜRÜKLEME TUTAMACI
+                            const Icon(Icons.drag_indicator, color: Colors.grey),
+                          ],
+                        )
                       else if (role != 'readOnly' && interactive)
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, color: Colors.black87),

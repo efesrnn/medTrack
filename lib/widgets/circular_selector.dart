@@ -182,11 +182,12 @@ class _CircularSelectorPainter extends CustomPainter {
   final BuildContext context;
 
   final List<Color> _colors = [
-    const Color(0xFF56ABE8),
-    const Color(0xFFFF5A6D),
-    const Color(0xFFFFC245),
-    const Color(0xFFEE63FF),
+    const Color(0xFF56ABE8), // Mavi (1. Bölme)
+    const Color(0xFFFF5A6D), // Kırmızı/Pembe (2. Bölme)
+    const Color(0xFFFFC245), // Sarı (3. Bölme)
+    // 4. rengi sildik çünkü artık ihtiyacımız yok.
   ];
+
 
   _CircularSelectorPainter(this.sections, this.context);
 

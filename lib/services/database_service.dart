@@ -1,29 +1,75 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart'; // RTDB Paketi eklendi
 
 // Roller için enum tanımı
 enum DeviceRole { owner, secondary, readOnly, none }
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseDatabase _rtdb = FirebaseDatabase.instance; // RTDB örneği
 
   // --- YARDIMCI METOTLAR ---
   String _sanitize(String email) => email.trim().toLowerCase();
 
   // --- TEMEL CİHAZ FONKSİYONLARI ---
 
-  // 1. İlaç saatlerini kaydetme
+  // 1. İlaç saatlerini kaydetme (HEM FIRESTORE HEM RTDB)
   Future<void> saveSectionConfig(String macAddress, List<Map<String, dynamic>> sections) async {
     if (macAddress.isEmpty) return;
     try {
+      // A. Firestore'a kaydet (Uygulama içi kalıcılık için)
       await _firestore.collection('dispenser').doc(macAddress).set({
         'section_config': sections,
       }, SetOptions(merge: true));
+
+      // B. Realtime Database'e kaydet (ESP32'nin okuması için)
+      // ESP32'nin kolay parse etmesi için yapıyı düzenliyoruz:
+      // /dispensers/{macAddress}/config/section_0/..
+      Map<String, dynamic> rtdbData = {};
+
+      for (int i = 0; i < sections.length; i++) {
+        rtdbData['section_$i'] = {
+          'name': sections[i]['name'], // İsim opsiyonel ama dursun
+          'hour': sections[i]['hour'],
+          'minute': sections[i]['minute'],
+          'isActive': sections[i]['isActive'] ?? false,
+          'verildi': false // İlaç verildi bilgisini sıfırlıyoruz (isteğe bağlı)
+        };
+      }
+
+      // RTDB'ye yazma işlemi
+      DatabaseReference ref = _rtdb.ref("dispensers/$macAddress/config");
+      await ref.set(rtdbData);
+
+      print("Veriler Firestore ve RTDB'ye başarıyla kaydedildi.");
+
     } catch (e) {
       print('Error saving section_config: $e');
     }
   }
 
-  // 2. Cihaz adını güncelleme
+  // 2. Buzzer / Alarm Tetikleme (HEM FIRESTORE HEM RTDB)
+  Future<void> toggleBuzzer(String macAddress, bool makeItRing) async {
+    if (macAddress.isEmpty) return;
+    try {
+      // A. Firestore (Opsiyonel, log amaçlı veya UI durumu için)
+      await _firestore.collection('dispenser').doc(macAddress).set({
+        'alarm': makeItRing,
+      }, SetOptions(merge: true));
+
+      // B. Realtime Database (ESP32'nin anlık tepki vermesi için KRİTİK)
+      // Yol: /dispensers/{macAddress}/buzzer -> true/false
+      DatabaseReference ref = _rtdb.ref("dispensers/$macAddress/buzzer");
+      await ref.set(makeItRing);
+
+      print("Buzzer komutu gönderildi: $makeItRing");
+
+    } catch (e) {
+      print('Error toggling buzzer: $e');
+    }
+  }
+
+  // 3. Cihaz adını güncelleme
   Future<void> updateDeviceName(String macAddress, String newName) async {
     if (macAddress.isEmpty || newName.isEmpty) return;
     try {
@@ -37,7 +83,7 @@ class DatabaseService {
 
   // --- KULLANICI YÖNETİMİ (HOME SCREEN İÇİN) ---
 
-  // 3. Rol Kontrolü
+  // 4. Rol Kontrolü
   Future<DeviceRole> getUserRole(String macAddress, String? rawEmail) async {
     if (rawEmail == null || macAddress.isEmpty) return DeviceRole.none;
     final String email = _sanitize(rawEmail);
@@ -63,7 +109,7 @@ class DatabaseService {
     }
   }
 
-  // 4. Yeni bir izleyici (read-only) ekler
+  // 5. Yeni bir izleyici (read-only) ekler
   Future<void> addReadOnlyUser(String macAddress, String rawEmail) async {
     final String email = _sanitize(rawEmail);
     if (macAddress.isEmpty || email.isEmpty) return;
@@ -77,7 +123,7 @@ class DatabaseService {
     }
   }
 
-  // 5. İzleyiciyi yöneticiye terfi ettirir (İzleyici -> Yönetici)
+  // 6. İzleyiciyi yöneticiye terfi ettirir
   Future<void> promoteToSecondary(String macAddress, String targetRawEmail) async {
     final String targetEmail = _sanitize(targetRawEmail);
     if (macAddress.isEmpty || targetEmail.isEmpty) return;
@@ -108,7 +154,7 @@ class DatabaseService {
     }
   }
 
-  // 6. Yöneticiyi izleyiciye düşürür (Yönetici -> İzleyici) [YENİ EKLENEN]
+  // 7. Yöneticiyi izleyiciye düşürür
   Future<void> demoteToReadOnly(String macAddress, String targetRawEmail) async {
     final String targetEmail = _sanitize(targetRawEmail);
     if (macAddress.isEmpty || targetEmail.isEmpty) return;
@@ -124,10 +170,8 @@ class DatabaseService {
         List<String> readOnly = List<String>.from(data['read_only_mails'] ?? []);
         List<String> secondary = List<String>.from(data['secondary_mails'] ?? []);
 
-        // Yöneticiden sil
         secondary.removeWhere((e) => _sanitize(e) == targetEmail);
 
-        // İzleyiciye ekle (eğer yoksa)
         if (!readOnly.any((e) => _sanitize(e) == targetEmail)) {
           readOnly.add(targetEmail);
         }
@@ -142,7 +186,7 @@ class DatabaseService {
     }
   }
 
-  // 7. Kullanıcıyı tamamen siler
+  // 8. Kullanıcıyı tamamen siler
   Future<void> removeUser(String macAddress, String rawEmail) async {
     final String email = _sanitize(rawEmail);
     if (macAddress.isEmpty || email.isEmpty) return;
@@ -159,7 +203,8 @@ class DatabaseService {
 
   // --- CİHAZ EKLEME VE SENKRONİZASYON ---
 
-  // 8. Manuel Cihaz Ekleme
+  // 9. Manuel Cihaz Ekleme
+  // 8. Manuel Cihaz Ekleme (GÜNCELLENDİ: Gizliyse tekrar görünür yapar)
   Future<String> addDeviceManually(String uid, String rawEmail, String macAddress) async {
     if (uid.isEmpty || macAddress.isEmpty || rawEmail.isEmpty) return 'Geçersiz bilgi.';
 
@@ -170,6 +215,23 @@ class DatabaseService {
       final userRef = _firestore.collection('users').doc(uid);
 
       return await _firestore.runTransaction((transaction) async {
+        // Önce kullanıcının gizli listesinde var mı bakalım
+        final userDoc = await transaction.get(userRef);
+        List<dynamic> unvisibleList = [];
+        if (userDoc.exists) {
+          unvisibleList = userDoc.data()?['unvisible_devices'] ?? [];
+        }
+
+        // Eğer cihaz zaten kullanıcınınsa ama gizliyse, sadece görünür yap
+        // (Burada kullanıcının already owner/secondary olduğunu kontrol eden mantığınız zaten var,
+        //  biz sadece görünürlük kilidini açıyoruz).
+        if (unvisibleList.contains(macAddress)) {
+          transaction.update(userRef, {
+            'unvisible_devices': FieldValue.arrayRemove([macAddress]),
+            'visible_devices': FieldValue.arrayUnion([macAddress]),
+          });
+          return 'Cihaz tekrar görünür yapıldı.';
+        }
         final deviceDoc = await transaction.get(deviceRef);
 
         if (!deviceDoc.exists) {
@@ -216,7 +278,7 @@ class DatabaseService {
     }
   }
 
-  // 9. Liste Senkronizasyonu
+  // 10. Liste Senkronizasyonu
   Future<void> updateUserDeviceList(String uid, String rawEmail) async {
     if (uid.isEmpty || rawEmail.isEmpty) return;
     final String email = _sanitize(rawEmail);
@@ -243,9 +305,10 @@ class DatabaseService {
       print('Update list error: $e');
     }
   }
-  // --- YENİ EKLENEN: GRUPLAMA (KLASÖR) SİSTEMİ ---
 
-  // Yeni bir klasör oluştur
+  // --- GRUPLAMA SİSTEMİ ---
+
+  // 11. Yeni bir klasör oluştur
   Future<void> createGroup(String uid, String groupName) async {
     try {
       final userDoc = _firestore.collection('users').doc(uid);
@@ -253,13 +316,12 @@ class DatabaseService {
 
       List<dynamic> groups = snapshot.data()?['device_groups'] ?? [];
 
-      // Basit bir ID oluştur (timestamp bazlı)
       String groupId = DateTime.now().millisecondsSinceEpoch.toString();
 
       groups.add({
         'id': groupId,
         'name': groupName,
-        'devices': [], // İçindeki cihaz MAC adresleri
+        'devices': [],
       });
 
       await userDoc.update({'device_groups': groups});
@@ -268,7 +330,7 @@ class DatabaseService {
     }
   }
 
-  // Klasörü sil (İçindeki cihazlar ana listeye düşer)
+  // 12. Klasörü sil
   Future<void> deleteGroup(String uid, String groupId) async {
     try {
       final userDoc = _firestore.collection('users').doc(uid);
@@ -283,7 +345,7 @@ class DatabaseService {
     }
   }
 
-  // Klasör ismini değiştir
+  // 13. Klasör ismini değiştir
   Future<void> renameGroup(String uid, String groupId, String newName) async {
     try {
       final userDoc = _firestore.collection('users').doc(uid);
@@ -301,7 +363,7 @@ class DatabaseService {
     }
   }
 
-  // Cihazı bir klasöre taşı (Sürükle-Bırak işlemi için)
+  // 14. Cihazı klasöre taşı
   Future<void> moveDeviceToGroup(String uid, String macAddress, String targetGroupId) async {
     try {
       final userDoc = _firestore.collection('users').doc(uid);
@@ -309,14 +371,14 @@ class DatabaseService {
 
       List<dynamic> groups = List.from(snapshot.data()?['device_groups'] ?? []);
 
-      // 1. Adım: Cihazı mevcut olduğu tüm gruplardan çıkar
+      // 1. Mevcut gruplardan çıkar
       for (var group in groups) {
         List<dynamic> devices = List.from(group['devices'] ?? []);
         devices.remove(macAddress);
         group['devices'] = devices;
       }
 
-      // 2. Adım: Eğer hedef bir grup ise (ana ekran değilse), o gruba ekle
+      // 2. Yeni gruba ekle
       if (targetGroupId.isNotEmpty) {
         var targetGroup = groups.firstWhere((g) => g['id'] == targetGroupId, orElse: () => null);
         if (targetGroup != null) {
@@ -332,5 +394,34 @@ class DatabaseService {
     } catch (e) {
       print('Error moving device: $e');
     }
+  }
+
+  // 15. Cihazı "Çöp Kutusuna" at (Sadece görünürlüğü kapatır, yetkiyi silmez)
+  Future<void> hideDevice(String uid, String macAddress) async {
+    if (uid.isEmpty || macAddress.isEmpty) return;
+
+    try {
+      final userRef = _firestore.collection('users').doc(uid);
+
+      // Cihazı 'unvisible_devices' listesine ekle
+      // İsteğe bağlı: 'visible_devices' varsa oradan çıkarılabilir ama blacklist mantığı daha sağlamdır.
+      await userRef.update({
+        'unvisible_devices': FieldValue.arrayUnion([macAddress]),
+        'visible_devices': FieldValue.arrayRemove([macAddress]), // Eğer whitelist tutuyorsanız
+      });
+
+      print('Cihaz gizlendi: $macAddress');
+    } catch (e) {
+      print('Gizleme hatası: $e');
+    }
+  }
+
+  // 16. Gizli cihazları filtreleyen yardımcı fonksiyon
+  // UI tarafında StreamBuilder içinde kullanılır.
+  List<String> filterVisibleDevices(List<String> allDevices, List<dynamic>? unvisibleList) {
+    if (unvisibleList == null || unvisibleList.isEmpty) return allDevices;
+
+    final unvisibleSet = unvisibleList.map((e) => e.toString()).toSet();
+    return allDevices.where((device) => !unvisibleSet.contains(device)).toList();
   }
 }
