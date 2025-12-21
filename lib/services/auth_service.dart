@@ -8,7 +8,7 @@ class AppUser {
   final String uid;
   final String? displayName;
   final String? photoURL;
-  final String? email; // EKLENDİ: Email alanı eklendi
+  final String? email;
 
   AppUser({
     required this.uid,
@@ -26,70 +26,64 @@ class AuthService {
 
   Future<AppUser?> getOrCreateUser() async {
     final prefs = await SharedPreferences.getInstance();
-    String? uid = prefs.getString('user_uid');
-    String? email;
-    String? displayName;
-    String? photoURL;
 
-    if (uid == null) {
+    // 1. Önce Firebase Auth'ta zaten oturum açmış bir kullanıcı var mı bakalım.
+    User? firebaseUser = _auth.currentUser;
+
+    // 2. Eğer oturum yoksa Google Sign-In başlatalım
+    if (firebaseUser == null) {
       try {
-        // Yeni kullanıcı için Google Girişi
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         if (googleUser == null) {
-          return null;
+          return null; // Kullanıcı girişi iptal etti
         }
+
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
+
         final UserCredential userCredential = await _auth.signInWithCredential(credential);
-
-        uid = userCredential.user?.uid;
-        email = userCredential.user?.email;
-        displayName = userCredential.user?.displayName;
-        photoURL = userCredential.user?.photoURL;
-
-        if (uid != null) {
-          await prefs.setString('user_uid', uid);
-          // Firestore'a kaydet
-          await _firestore.collection('users').doc(uid).set({
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastLogin': FieldValue.serverTimestamp(),
-            'email': email,
-            'displayName': displayName,
-            'photoURL': photoURL,
-          }, SetOptions(merge: true));
-        }
+        firebaseUser = userCredential.user;
       } catch (e) {
-        print('Error with Google sign-in: $e');
+        print('Google Sign-In Error: $e');
         return null;
       }
-    } else {
-      // Mevcut kullanıcı, verileri Firestore'dan çek
+    }
+
+    // 3. Kullanıcı (firebaseUser) elimizdeyse işlemleri yapalım
+    if (firebaseUser != null) {
+      final uid = firebaseUser.uid;
+      final email = firebaseUser.email;
+      final displayName = firebaseUser.displayName;
+      final photoURL = firebaseUser.photoURL;
+
+      // SharedPreferences'a UID'yi yedekleyelim (Session kontrolü için kullanıyorsanız)
+      await prefs.setString('user_uid', uid);
+
+      // --- KRİTİK GÜNCELLEME BURASI ---
+      // Her açılışta, Firebase'den gelen en güncel İsim ve Fotoğrafı Firestore'a YAZIYORUZ.
+      // Bu sayede "Yakınlarım" ekranında fotoğraflar her zaman güncel kalır.
       try {
-        final userDoc = await _firestore.collection('users').doc(uid).get();
-        if (userDoc.exists) {
-          final data = userDoc.data()!;
-          email = data['email'] as String?;
-          displayName = data['displayName'] as String?;
-          photoURL = data['photoURL'] as String?;
-        }
-
-        await _firestore.collection('users').doc(uid).update({
-          'lastLogin': FieldValue.serverTimestamp(),
-        });
+        await _firestore.collection('users').doc(uid).set({
+          'email': email,
+          'displayName': displayName ?? '',
+          'photoURL': photoURL ?? '',
+          'lastLogin': FieldValue.serverTimestamp(), // Son görülme zamanı
+          // 'createdAt': FieldValue.serverTimestamp(), // Bunu set ile her seferinde ezmemek için update kullanmak daha iyi olabilir veya merge ile createdAt varsa dokunma mantığı gerekebilir ama şimdilik set merge:true yeterli.
+        }, SetOptions(merge: true)); // merge: true -> Mevcut cihaz listesi vb. verileri silme, sadece bunları güncelle.
       } catch (e) {
-        print('Error fetching user email or updating login: $e');
+        print('Firestore update error: $e');
       }
-    }
+      // ---------------------------------
 
-    if (uid != null && email != null) {
-      await _dbService.updateUserDeviceList(uid, email);
-    }
+      // Cihaz listelerini senkronize et (DatabaseService)
+      if (email != null) {
+        await _dbService.updateUserDeviceList(uid, email);
+      }
 
-    if (uid != null) {
-      // EKLENDİ: email parametresi AppUser'a gönderiliyor
+      // Uygulamaya kullanıcı objesini döndür
       return AppUser(
           uid: uid,
           displayName: displayName,
@@ -97,13 +91,18 @@ class AuthService {
           email: email
       );
     }
+
     return null;
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _auth.signOut();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_uid');
+    try {
+      await _googleSignIn.signOut();
+      await _auth.signOut();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_uid');
+    } catch (e) {
+      print("Sign out error: $e");
+    }
   }
 }

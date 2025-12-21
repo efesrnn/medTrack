@@ -418,10 +418,109 @@ class DatabaseService {
 
   // 16. Gizli cihazları filtreleyen yardımcı fonksiyon
   // UI tarafında StreamBuilder içinde kullanılır.
-  List<String> filterVisibleDevices(List<String> allDevices, List<dynamic>? unvisibleList) {
-    if (unvisibleList == null || unvisibleList.isEmpty) return allDevices;
+  Future<List<Map<String, dynamic>>> getRelativesInfo(String uid, String currentUserEmail) async {
+    Set<String> relativeEmails = {};
+    String myEmail = _sanitize(currentUserEmail);
 
-    final unvisibleSet = unvisibleList.map((e) => e.toString()).toSet();
-    return allDevices.where((device) => !unvisibleSet.contains(device)).toList();
+    try {
+      // A. Kullanıcının dahil olduğu tüm cihazları bul
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(uid).get();
+      if (!userDoc.exists) return [];
+
+      Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+
+      List<dynamic> allDeviceIds = [];
+      allDeviceIds.addAll(userData['owned_dispensers'] ?? []);
+      allDeviceIds.addAll(userData['secondary_dispensers'] ?? []);
+      allDeviceIds.addAll(userData['read_only_dispensers'] ?? []);
+
+      if (allDeviceIds.isEmpty) return [];
+
+      // B. Cihazları tara ve mailleri topla
+      for (var deviceId in allDeviceIds) {
+        try {
+          DocumentSnapshot deviceDoc = await _firestore.collection('dispenser').doc(deviceId).get();
+          if (deviceDoc.exists) {
+            Map<String, dynamic> data = deviceDoc.data() as Map<String, dynamic>;
+
+            if (data['owner_mail'] != null) relativeEmails.add(_sanitize(data['owner_mail'].toString()));
+
+            // Listeleri güvenli şekilde ekle
+            if (data['secondary_mails'] != null) {
+              for (var m in data['secondary_mails']) relativeEmails.add(_sanitize(m.toString()));
+            }
+            if (data['read_only_mails'] != null) {
+              for (var m in data['read_only_mails']) relativeEmails.add(_sanitize(m.toString()));
+            }
+          }
+        } catch (e) {
+          print("Cihaz ($deviceId) okunurken hata: $e");
+          // Bir cihaz hatalıysa diğerine geç, durma
+        }
+      }
+
+      // C. Kendimizi listeden çıkaralım
+      relativeEmails.remove(myEmail);
+
+      if (relativeEmails.isEmpty) return [];
+
+      // D. Profilleri Çek (KRİTİK DÜZELTME BURADA)
+      List<Map<String, dynamic>> relativesProfiles = [];
+
+      for (var email in relativeEmails) {
+        String displayName = '';
+        String photoURL = '';
+        bool isRegistered = false;
+
+        try {
+          // Bu sorgu "Permission Denied" verebilir, bu yüzden try-catch içinde izole ettik.
+          QuerySnapshot query = await _firestore.collection('users').where('email', isEqualTo: email).limit(1).get();
+
+          if (query.docs.isNotEmpty) {
+            var profile = query.docs.first.data() as Map<String, dynamic>;
+            displayName = profile['displayName'] ?? '';
+            photoURL = profile['photoURL'] ?? '';
+            isRegistered = true;
+          }
+        } catch (e) {
+          // Eğer yetki hatası alırsak, en azından mail adresini gösterelim, akışı bozmayalım.
+          print("Profil detayı çekilemedi ($email): $e");
+        }
+
+        relativesProfiles.add({
+          'email': email,
+          'displayName': displayName,
+          'photoURL': photoURL,
+          'isRegistered': isRegistered,
+        });
+      }
+
+      return relativesProfiles;
+
+    } catch (e) {
+      print("Genel getRelativesInfo hatası: $e");
+      return [];
+    }
+  }
+
+  // 2. Takma İsim (Nickname) Kaydet
+  Future<void> updateRelativeNickname(String uid, String relativeEmail, String nickname) async {
+    try {
+      // Nicknameleri kullanıcının kendi dokümanında saklıyoruz (Map olarak)
+      // relatives_nicknames: { "ahmet@mail.com": "Babam", ... }
+
+      // Email'deki noktalar Firestore Map key'lerinde sorun yaratabilir, encode edebiliriz ama
+      // şimdilik basitçe saklayalım. (Özel karakter sorunu olursa base64 yapılabilir)
+      String safeKey = relativeEmail.replaceAll('.', '_dot_');
+
+      await _firestore.collection('users').doc(uid).set({
+        'relatives_nicknames': {
+          safeKey: nickname
+        }
+      }, SetOptions(merge: true));
+
+    } catch (e) {
+      print("Nickname update error: $e");
+    }
   }
 }

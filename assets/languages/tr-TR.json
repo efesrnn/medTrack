@@ -79,5 +79,10 @@
   "dose_suffix": "Doz",
   "reminder_times_header": "Hatırlatma Saatleri",
   "add_time": "Saat Ekle",
-  "no_times_added": "Saat eklenmedi"
+  "no_times_added": "Saat eklenmedi",
+  "edit_nickname": "Takma İsim Düzenle",
+  "nickname_hint": "Bu kişiyi listenizde nasıl görmek istersiniz?",
+  "father_mom_etc": "Örn: Babam, Bakıcı Ayşe...",
+  "no_relatives_found": "Henüz yakınınız yok",
+  "no_relatives_desc": "Yönetici veya izleyici olarak eklendiğiniz cihazlardaki diğer kişiler burada görünür."
 }
