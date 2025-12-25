@@ -22,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final NotificationService _notificationService = NotificationService();
   final AuthService _authService = AuthService();
 
-  // ARTIK YAPIMIZ: 'times': List<TimeOfDay>
+  // STRUCTURE: 'times': List<TimeOfDay>
   List<Map<String, dynamic>> _sections = [];
   bool _isLoading = true;
   bool _isRinging = false;
@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // --- ÇOKLU SAAT DESTEKLİ YÜKLEME ---
+  // --- MULTI-TIME SUPPORTED LOADING ---
   Future<void> _loadSections() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('dispenser').doc(widget.macAddress).get();
@@ -64,41 +64,40 @@ class _HomeScreenState extends State<HomeScreen> {
             final Map<String, dynamic> section = item as Map<String, dynamic>;
             final bool isActive = section['isActive'] ?? false;
 
-            // YENİ FORMAT: 'schedule' listesi var mı?
+            // NEW FORMAT: Check for 'schedule' list
             List<TimeOfDay> times = [];
             if (section.containsKey('schedule')) {
-              // Yeni format: [{h:8, m:0}, {h:12, m:0}]
+              // New format: [{h:8, m:0}, {h:12, m:0}]
               times = (section['schedule'] as List).map((t) {
                 return TimeOfDay(hour: t['h'], minute: t['m']);
               }).toList();
             } else {
-              // Eski format (Tekil saat): {hour: 8, minute: 0}
-              // Geriye dönük uyumluluk için
+              // Old format fallback
               if (isActive) {
                 times.add(TimeOfDay(hour: section['hour'] ?? 8, minute: section['minute'] ?? 0));
               }
             }
 
-            // Eğer hiç saat yoksa varsayılan bir saat ekle (Aktifse)
+            // If active but no times, add default
             if (times.isEmpty && isActive) {
               times.add(const TimeOfDay(hour: 8, minute: 0));
             }
 
             return {
               'name': section['name'],
-              'times': times, // ARTIK LİSTE
+              'times': times,
               'isActive': isActive,
             };
           }).toList();
         }
       }
 
-      // Veri yoksa veya hatalıysa (4 bölme vb.) sıfırla
+      // Reset if data is invalid or missing
       if (!dataIsValid) {
         _sections = List.generate(3, (index) {
           return {
             'name': 'medicine_default_name'.tr(args: [(index + 1).toString()]),
-            'times': [TimeOfDay(hour: (8 + 5 * index) % 24, minute: 0)], // Varsayılan tek saat
+            'times': [TimeOfDay(hour: (8 + 5 * index) % 24, minute: 0)],
             'isActive': true,
           };
         });
@@ -108,33 +107,39 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      _notificationService.scheduleMedicationNotifications(_sections);
+      // --- FIXED: Added context parameter ---
+      if (mounted) {
+        await _notificationService.scheduleMedicationNotifications(context, _sections);
+      }
 
     } catch (e) {
       print("Error loading sections: $e");
     }
   }
 
-  // --- ÇOKLU SAAT DESTEKLİ KAYIT ---
+  // --- MULTI-TIME SUPPORTED SAVING ---
   Future<void> _saveSectionConfig() async {
     if (!_canEdit()) return;
 
     final List<Map<String, dynamic>> serializableList = _sections.map((section) {
       final List<TimeOfDay> times = section['times'] as List<TimeOfDay>;
 
-      // Saatleri her zaman sıralı kaydedelim (Sabah -> Akşam)
-      times.sort((a, b) => (a.hour * 60 + a.minute).compareTo(b.hour * 60 + b.minute));
-
       return {
         'name': section['name'],
         'isActive': section['isActive'] ?? false,
-        // SADECE SCHEDULE LİSTESİ OLUŞTURUYORUZ
         'schedule': times.map((t) => {'h': t.hour, 'm': t.minute}).toList(),
+        // Legacy support fields
+        'hour': times.isNotEmpty ? times.first.hour : 0,
+        'minute': times.isNotEmpty ? times.first.minute : 0,
       };
     }).toList();
 
     await _databaseService.saveSectionConfig(widget.macAddress, serializableList);
-    // await _notificationService.scheduleMedicationNotifications(_sections);
+
+    // --- FIXED: Added context parameter ---
+    if (mounted) {
+      await _notificationService.scheduleMedicationNotifications(context, _sections);
+    }
   }
 
   void _updateSection(int index, Map<String, dynamic> data) {
@@ -145,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _sections[index].addAll(data);
-      _sections[index]['isActive'] = true; // Düzenleyince aktif olsun
+      _sections[index]['isActive'] = true;
     });
     _saveSectionConfig();
   }
@@ -171,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- KULLANICI YÖNETİMİ DİYALOGU ---
+  // --- USER MANAGEMENT DIALOG ---
   void _showUserManagementDialog() {
     final TextEditingController emailController = TextEditingController();
 
@@ -318,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- ALARM AYARLARI ---
+  // --- ALARM SETTINGS DIALOG ---
   Future<void> _showNotificationSettingsDialog() async {
     final settings = await _notificationService.getNotificationSettings();
     bool notificationsEnabled = settings['enabled'];
@@ -382,11 +387,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       enabled: notificationsEnabled,
                       offset: offset,
                     );
-                    await _notificationService.scheduleMedicationNotifications(_sections);
-                    if (mounted) Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("alarm_settings_saved".tr())),
-                    );
+
+                    // --- FIXED: Added context parameter ---
+                    if (mounted) {
+                      await _notificationService.scheduleMedicationNotifications(context, _sections);
+                    }
+
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("alarm_settings_saved".tr())),
+                      );
+                    }
                   },
                   child: Text("save".tr()),
                 ),
@@ -480,14 +492,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 15),
 
-              // --- PLANLANMIŞ İLAÇLAR LİSTESİ (ÇOKLU SAAT GÖRÜNÜMÜ) ---
+              // --- SCHEDULED MEDICATIONS LIST ---
               ..._sections.asMap().entries.map((entry) {
                 int index = entry.key;
                 Map<String, dynamic> section = entry.value;
                 List<TimeOfDay> times = section['times'] as List<TimeOfDay>;
                 bool isActive = section['isActive'] ?? false;
 
-                // Saatleri sırala
                 times.sort((a, b) => (a.hour * 60 + a.minute).compareTo(b.hour * 60 + b.minute));
 
                 return Card(
@@ -511,7 +522,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
 
-                            // --- SAĞ TARAFTAKİ BUTONLAR ---
                             if (!isReadOnly) ...[
                               IconButton(
                                 icon: const Icon(Icons.edit_outlined),
@@ -539,7 +549,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // SAATLERİ GÖSTEREN KISIM (CHIP LIST)
                         if (!isActive)
                           Padding(
                             padding: const EdgeInsets.only(left: 56.0),

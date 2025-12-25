@@ -30,6 +30,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.13.1
+  alarm: ^4.1.1
+
 
   flutter_lints: ^5.0.0
 
@@ -44,3 +46,6 @@ flutter:
   assets:
     - assets/
     - assets/languages/
+    - assets/alarms/
+    - assets/dispenser_icon.png
+    - assets/pill_icon.png

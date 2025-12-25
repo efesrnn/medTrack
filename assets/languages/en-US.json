@@ -84,5 +84,8 @@
   "nickname_hint": "How would you like to see this person in your list?",
   "father_mom_etc": "Ex: Dad, Nurse Mary...",
   "no_relatives_found": "No relatives yet",
-  "no_relatives_desc": "People from devices where you are an admin or viewer will appear here."
+  "no_relatives_desc": "People from devices where you are an admin or viewer will appear here.",
+  "medicine_time_title": "Medicine Time!",
+  "medicine_time_body": "It's time to take {}.",
+  "stop_alarm": "STOP"
 }

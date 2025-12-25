@@ -581,21 +581,11 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           exists = true;
         }
 
-        // --- BOYUT VE MARGIN AYARLARI (GÜNCELLENDİ) ---
-
-        // Klasör içi yükseklik artırıldı: 85 -> 105 (Daha rahat okunur)
-        final double cardHeight = isInsideGroup ? 105.0 : 130.0;
-
-        // Klasör içi resim büyütüldü: 50 -> 60
+        // --- BOYUT AYARLARI ---
+        final double cardHeight = isInsideGroup ? 125.0 : 160.0;
         final double imageSize = isInsideGroup ? 60.0 : 85.0;
-
-        // Klasör içi font büyütüldü: 14 -> 15.5
         final double titleFontSize = isInsideGroup ? 15.5 : 18.0;
 
-        // MARGIN DÜZELTMESİ:
-        // ListView zaten 16px padding veriyor.
-        // Klasör dışındakilere (isInsideGroup=false) '0' vererek klasörle aynı hizaya getirdik.
-        // Klasör içindekilere (isInsideGroup=true) '4' vererek hafif içeride durmasını sağladık (Hiyerarşi için).
         final double horizontalMargin = isInsideGroup ? 4.0 : 0.0;
         final double verticalMargin = isInsideGroup ? 4.0 : 8.0;
 
@@ -630,11 +620,10 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           width: double.infinity,
           margin: EdgeInsets.symmetric(
             vertical: verticalMargin,
-            horizontal: horizontalMargin, // Düzeltilmiş kenar boşluğu
+            horizontal: horizontalMargin,
           ),
           child: Card(
             clipBehavior: Clip.antiAlias,
-            // CardTheme main.dart'tan geliyor
             child: InkWell(
               onTap: (exists && interactive)
                   ? () {
@@ -647,27 +636,21 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                   : null,
               onLongPress: onLongPress,
               child: Padding(
-                // Klasör içi padding biraz daha ferahlatıldı (8 -> 10)
                 padding: EdgeInsets.all(isInsideGroup ? 10.0 : 12.0),
                 child: Row(
                   children: [
+                    // --- GÜNCELLENEN RESİM ALANI (Border ve Renk Kaldırıldı) ---
                     Container(
                       width: imageSize,
-                      height: imageSize,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0F9FF),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade50),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          'assets/dispenser_icon.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) =>
-                              Icon(Icons.medication, color: colorSkyBlue,
-                                  size: imageSize * 0.5),
-                        ),
+                      height: imageSize * 1.5, // 400x600 oranı
+                      // Decoration (Arka plan ve Border) tamamen kaldırıldı
+                      alignment: Alignment.center, // Görseli ortala
+                      child: Image.asset(
+                        'assets/dispenser_icon.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (c, o, s) =>
+                            Icon(Icons.medication, color: colorSkyBlue,
+                                size: imageSize * 0.5),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -689,7 +672,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Rol ikonu ve yazısı da büyütüldü
                                 Icon(roleIcon, size: isInsideGroup ? 12 : 14,
                                     color: roleTextColor),
                                 const SizedBox(width: 4),
@@ -698,7 +680,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                                     roleText,
                                     style: TextStyle(
                                       color: roleTextColor,
-                                      // Klasör içi rol yazısı 9 -> 11 oldu (Okunabilirlik arttı)
                                       fontSize: isInsideGroup ? 11 : 12,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -714,7 +695,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                               style: TextStyle(
                                 color: colorDeepSea,
                                 fontWeight: FontWeight.w700,
-                                fontSize: titleFontSize, // 15.5 oldu
+                                fontSize: titleFontSize,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -726,7 +707,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                               style: TextStyle(
                                 color: Colors.blueGrey.shade400,
                                 fontSize: isInsideGroup ? 11.5 : 12,
-                                // Hafif büyütüldü
                                 fontFamily: 'Courier',
                                 letterSpacing: -0.3,
                               ),
@@ -744,7 +724,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                         children: [
                           IconButton(
                             iconSize: isInsideGroup ? 22 : 24,
-                            // Butonlar büyütüldü
                             constraints: const BoxConstraints(),
                             padding: EdgeInsets.zero,
                             icon: const Icon(Icons.delete_outline_rounded,
