@@ -1,7 +1,7 @@
 # MedTrack - Smart Medicine Dispenser 💊
 
 <p align="center">
-  <img src="assets/medtrack_logo.png" alt="MedTrack Logo" width="200"/>
+  <img src="assets/icon.png" alt="MedTrack Logo" width="200"/>
 </p>
 
 <p align="center">
