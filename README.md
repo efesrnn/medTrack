@@ -58,6 +58,20 @@ MedTrack provides:
 | 🔊 **Remote Buzzer** | Find your device feature |
 | 🌍 **Localization** | Turkish and English support |
 
+
+
+## 📱 Mobile App Screenshots
+
+<p align="center">
+  <img src="assets/ScreenShots/DeviceList.jpeg" width="250" alt="Home Screen"/>
+  <img src="assets/ScreenShots/DeviceScheduling.jpeg" width="250" alt="Device Scheduling Screen"/>
+  <img src="assets/ScreenShots/SynchScreen.jpeg" width="250" alt="Synchronization Screen"/>
+  <img src="assets/ScreenShots/RelativesScreen.jpeg" width="250" alt="Relatives Screen"/>
+  <img src="assets/ScreenShots/WeeklyReportScreen.jpeg" width="250" alt="Weekly Report Screen"/>
+</p>
+
+
+
 ### IoT Device (ESP32)
 
 | Feature | Description |
@@ -173,17 +187,6 @@ Phone ←─BLE─→ ESP32 (WiFi credentials transfer)
 ### 3D Model
 
 > 📦 STL files for the dispenser enclosure are available in the `/hardware/3d-models/` directory.
-
----
-
-## 📱 Mobile App Screenshots
-
-<p align="center">
-  <img src="docs/screenshots/home_screen.png" width="200" alt="Home Screen"/>
-  <img src="docs/screenshots/device_list.png" width="200" alt="Device List"/>
-  <img src="docs/screenshots/alarm_screen.png" width="200" alt="Alarm Screen"/>
-  <img src="docs/screenshots/reports.png" width="200" alt="Reports"/>
-</p>
 
 ---
 
