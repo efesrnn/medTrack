@@ -10,12 +10,13 @@
 
 <p align="center">
   <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#hardware">Hardware</a> •
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
   <a href="#api">API</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#team">Team</a>
 </p>
 
 ---
@@ -43,6 +44,8 @@ MedTrack provides:
 
 ---
 
+<a id="features"></a>
+
 ## ✨ Features
 
 ### Mobile Application (Flutter)
@@ -59,6 +62,8 @@ MedTrack provides:
 | 🌍 **Localization** | Turkish and English support |
 
 
+
+<a id="screenshots"></a>
 
 ## 📱 Mobile App Screenshots
 
@@ -96,6 +101,8 @@ MedTrack provides:
 | 🔧 **Factory Reset** | Triple-press boot button |
 
 ---
+
+<a id="architecture"></a>
 
 ## 🏗️ Architecture
 
@@ -160,6 +167,8 @@ Phone ←─BLE─→ ESP32 (WiFi credentials transfer)
 
 ---
 
+<a id="hardware"></a>
+
 ## 🔧 Hardware
 
 ### Components
@@ -201,6 +210,8 @@ Phone ←─BLE─→ ESP32 (WiFi credentials transfer)
 > 📦 STL files for the dispenser enclosure are available in the `/hardware/3d-models/` directory.
 
 ---
+
+<a id="installation"></a>
 
 ## 🚀 Installation
 
@@ -294,6 +305,8 @@ service cloud.firestore {
 
 ---
 
+<a id="usage"></a>
+
 ## 📖 Usage
 
 ### First-Time Setup
@@ -337,6 +350,8 @@ When an alarm triggers:
 *Read-only users can view reports only if the owner enables feedback sharing.
 
 ---
+
+<a id="api"></a>
 
 ## 📡 API Reference
 
@@ -490,6 +505,8 @@ flutter test integration_test/
 This project is licensed under the MIT License - see the [LICENSE (In progress...)](LICENSE) file for details.
 
 ---
+
+<a id="team"></a>
 
 ## 👥 Team
 
