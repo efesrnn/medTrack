@@ -70,6 +70,18 @@ MedTrack provides:
   <img src="assets/ScreenShots/WeeklyReportScreen.jpeg" width="250" alt="Weekly Report Screen"/>
 </p>
 
+## 🎬 Demo Video
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=bI7RfsWRz98">
+    <img src="https://img.youtube.com/vi/bI7RfsWRz98/0.jpg" width="600" alt="MedTrack Demo Video"/>
+  </a>
+</p>
+
+<p align="center">
+  <em>Device and app testing walkthrough</em>
+</p>
+
 
 
 ### IoT Device (ESP32)
