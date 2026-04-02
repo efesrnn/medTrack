@@ -70,11 +70,11 @@ MedTrack provides:
   <img src="assets/ScreenShots/WeeklyReportScreen.jpeg" width="250" alt="Weekly Report Screen"/>
 </p>
 
-## 🎬 Demo Video
+## 🎬 Prototype Video
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=bI7RfsWRz98">
-    <img src="https://img.youtube.com/vi/bI7RfsWRz98/0.jpg" width="600" alt="MedTrack Demo Video"/>
+    <img src="https://img.youtube.com/vi/bI7RfsWRz98/0.jpg" width="600" alt="MedTrack Prototype Video"/>
   </a>
 </p>
 
